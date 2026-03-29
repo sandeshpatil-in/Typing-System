@@ -15,6 +15,12 @@
     
     # Referrer Policy
     Header set Referrer-Policy "strict-origin-when-cross-origin"
+
+    # Restrict powerful browser features by default
+    Header set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+
+    # Tighten cross-origin isolation defaults for static assets
+    Header set Cross-Origin-Resource-Policy "same-origin"
 </IfModule>
 
 # ============================================
@@ -83,7 +89,12 @@ Options -Indexes
 # ============================================
 # Protect Sensitive Files
 # ============================================
-<FilesMatch "\.(env|config|database|sql|log)$">
+<FilesMatch "\.(env|config|database|sql|log|md|json|lock)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+<FilesMatch "^(\.git|\.gitignore|composer\.(json|lock)|package(-lock)?\.json)$">
     Order allow,deny
     Deny from all
 </FilesMatch>

@@ -11,10 +11,10 @@
 // ==========================================
 // DATABASE CONFIGURATION
 // ==========================================
-define('DB_HOST', 'localhost');
-define('DB_USER', 'root');
-define('DB_PASS', '');
-define('DB_NAME', 'ahilya_typing');
+define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
+define('DB_USER', getenv('DB_USER') ?: 'root');
+define('DB_PASS', getenv('DB_PASS') ?: '');
+define('DB_NAME', getenv('DB_NAME') ?: 'ahilya_typing');
 define('DB_CHARSET', 'utf8mb4');
 
 //define('DB_HOST', 'sql100.infinityfree.com');
@@ -26,14 +26,15 @@ define('DB_CHARSET', 'utf8mb4');
 // ==========================================
 // APPLICATION CONFIGURATION
 // ==========================================
-define('APP_NAME', 'Ahilya Student Desk');
+define('APP_NAME', getenv('APP_NAME') ?: 'Ahilya Student Desk');
 define('APP_VERSION', '1.0.0');
-define('APP_ENV', 'production'); // development | production
+define('APP_ENV', getenv('APP_ENV') ?: 'production'); // development | production
 
 // ==========================================
 // PATH CONFIGURATION
 // ==========================================
-define('BASE_URL', 'http://localhost/ahilya-typing/');
+$baseUrl = getenv('BASE_URL') ?: 'http://localhost/ahilya-typing/';
+define('BASE_URL', rtrim($baseUrl, '/') . '/');
 
 //define('BASE_URL', 'https://ahilyastudentdesk.rf.gd/');
 define('ROOT_PATH', dirname(dirname(__FILE__)));
@@ -53,12 +54,24 @@ define('ADMIN_SESSION_KEY', 'admin_id');
 define('MAX_LOGIN_ATTEMPTS', 5);
 define('LOGIN_ATTEMPT_TIMEOUT', 900); // 15 minutes
 define('PASSWORD_MIN_LENGTH', 6);
+define('GUEST_TEST_LIMIT', 5);
+define('PLAN_DURATION_DAYS', 30);
 
 // ==========================================
 // PAGINATION & LIMITS
 // ==========================================
 define('ITEMS_PER_PAGE', 10);
 define('TYPING_TEST_MAX_TIME', 600); // 10 minutes max
+
+// ==========================================
+// PAYMENT CONFIGURATION
+// ==========================================
+define('PLAN_NAME', 'Pro Monthly');
+define('PLAN_PRICE', 199.00);
+define('PLAN_PRICE_PAISE', (int) round(PLAN_PRICE * 100));
+define('PAYMENT_CURRENCY', 'INR');
+define('RAZORPAY_KEY_ID', getenv('RAZORPAY_KEY_ID') ?: '');
+define('RAZORPAY_KEY_SECRET', getenv('RAZORPAY_KEY_SECRET') ?: '');
 
 // ==========================================
 // ERROR HANDLING

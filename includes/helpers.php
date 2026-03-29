@@ -124,6 +124,13 @@ function handleError($message, $code = 500) {
  */
 function initSession() {
     if (session_status() === PHP_SESSION_NONE) {
+        if (!headers_sent()) {
+            session_set_cookie_params([
+                'httponly' => true,
+                'samesite' => 'Lax',
+                'secure' => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            ]);
+        }
         session_start();
         
         // Set secure session configuration
@@ -166,6 +173,43 @@ function getStudentId() {
  */
 function getAdminId() {
     return $_SESSION[ADMIN_SESSION_KEY] ?? null;
+}
+
+/**
+ * Store authenticated student session
+ *
+ * @param int $studentId Student ID
+ * @return void
+ */
+function loginStudent($studentId) {
+    initSession();
+    session_regenerate_id(true);
+    $_SESSION[STUDENT_SESSION_KEY] = (int)$studentId;
+}
+
+/**
+ * Destroy current session safely
+ *
+ * @return void
+ */
+function logoutCurrentUser() {
+    initSession();
+    $_SESSION = [];
+
+    if (ini_get('session.use_cookies')) {
+        $params = session_get_cookie_params();
+        setcookie(
+            session_name(),
+            '',
+            time() - 42000,
+            $params['path'],
+            $params['domain'],
+            $params['secure'],
+            $params['httponly']
+        );
+    }
+
+    session_destroy();
 }
 
 /**
@@ -262,6 +306,87 @@ function warningAlert($message) {
                 {$message}
                 <button type='button' class='btn-close' data-bs-dismiss='alert'></button>
             </div>";
+}
+
+/**
+ * Generate or return current CSRF token
+ *
+ * @return string
+ */
+function csrfToken() {
+    initSession();
+
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+
+    return $_SESSION['csrf_token'];
+}
+
+/**
+ * Verify a CSRF token value
+ *
+ * @param string|null $token
+ * @return bool
+ */
+function verifyCsrfToken($token) {
+    initSession();
+
+    if (empty($_SESSION['csrf_token']) || empty($token)) {
+        return false;
+    }
+
+    return hash_equals($_SESSION['csrf_token'], $token);
+}
+
+/**
+ * Store flash data for next request
+ *
+ * @param string $key
+ * @param mixed $value
+ * @return void
+ */
+function setFlash($key, $value) {
+    initSession();
+    $_SESSION['_flash'][$key] = $value;
+}
+
+/**
+ * Get and remove flash data
+ *
+ * @param string $key
+ * @param mixed $default
+ * @return mixed
+ */
+function getFlash($key, $default = null) {
+    initSession();
+
+    if (!isset($_SESSION['_flash'][$key])) {
+        return $default;
+    }
+
+    $value = $_SESSION['_flash'][$key];
+    unset($_SESSION['_flash'][$key]);
+
+    if (empty($_SESSION['_flash'])) {
+        unset($_SESSION['_flash']);
+    }
+
+    return $value;
+}
+
+/**
+ * Send JSON response and stop execution
+ *
+ * @param array $data
+ * @param int $statusCode
+ * @return void
+ */
+function jsonResponse($data, $statusCode = 200) {
+    http_response_code($statusCode);
+    header('Content-Type: application/json');
+    echo json_encode($data);
+    exit();
 }
 
 ?>

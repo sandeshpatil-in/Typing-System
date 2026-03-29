@@ -31,6 +31,7 @@ class UserValidator {
      * @return array|false User data or false
      */
     public function validateLogin($email, $password, $userType = 'student') {
+        $this->errors = [];
         $email = sanitizeInput($email);
         
         // Email validation
@@ -64,15 +65,28 @@ class UserValidator {
         $stmt->close();
 
         // Verify password
+        $storedPassword = $user['password'] ?? '';
+
         if ($userType === 'admin') {
-            // Use password_verify for admin (hashed passwords)
-            if (!password_verify($password, $user['password'])) {
+            if (!password_verify($password, $storedPassword)) {
                 $this->errors[] = "Invalid password";
                 return false;
             }
         } else {
-            // Direct comparison for students (if plaintext)
-            if ($user['password'] !== $password) {
+            $isValidPassword = false;
+
+            if (!empty($storedPassword) && password_get_info($storedPassword)['algo'] !== null) {
+                $isValidPassword = password_verify($password, $storedPassword);
+            } else {
+                $isValidPassword = hash_equals((string)$storedPassword, (string)$password);
+
+                if ($isValidPassword) {
+                    $this->upgradeLegacyStudentPassword((int)$user['id'], $password);
+                    $user['password'] = $this->getStoredPasswordHash((int)$user['id']) ?: $storedPassword;
+                }
+            }
+
+            if (!$isValidPassword) {
                 $this->errors[] = "Invalid password";
                 return false;
             }
@@ -91,7 +105,7 @@ class UserValidator {
         $this->errors = [];
 
         // Validate required fields
-        $required = ['name', 'email', 'password', 'confirm_password'];
+        $required = ['name', 'email', 'password'];
         if (!validateRequired($required, $data)) {
             $this->errors[] = "All fields are required";
             return false;
@@ -126,8 +140,13 @@ class UserValidator {
             return false;
         }
 
+        if (!self::isPasswordStrong($data['password'])) {
+            $this->errors[] = "Password must include uppercase, lowercase, and a number";
+            return false;
+        }
+
         // Confirm password
-        if ($data['password'] !== $data['confirm_password']) {
+        if (isset($data['confirm_password']) && $data['password'] !== $data['confirm_password']) {
             $this->errors[] = "Passwords do not match";
             return false;
         }
@@ -158,15 +177,13 @@ class UserValidator {
      * @return bool True if account is valid
      */
     public function validateStudentStatus($user) {
-        // Check if account is activated
-        if ($user['status'] == 0) {
-            $this->errors[] = "Your account has not been activated by admin";
+        if (empty($user)) {
+            $this->errors[] = "Account not found";
             return false;
         }
 
-        // Check if subscription expired
-        if (strtotime($user['expiry_date']) < time()) {
-            $this->errors[] = "Your subscription has expired. Please renew your plan.";
+        if ((int) ($user['status'] ?? 0) !== 1) {
+            $this->errors[] = "Your account is disabled";
             return false;
         }
 
@@ -204,11 +221,11 @@ class UserValidator {
 
         $name = sanitizeInput($data['name']);
         $email = sanitizeInput($data['email']);
-        $password = sanitizeInput($data['password']);
+        $passwordHash = password_hash($data['password'], PASSWORD_DEFAULT);
 
         $stmt = $this->conn->prepare(
             "INSERT INTO students (name, email, password, status, created_at) 
-             VALUES (?, ?, ?, 0, NOW())"
+             VALUES (?, ?, ?, 1, NOW())"
         );
 
         if (!$stmt) {
@@ -216,7 +233,7 @@ class UserValidator {
             return false;
         }
 
-        $stmt->bind_param("sss", $name, $email, $password);
+        $stmt->bind_param("sss", $name, $email, $passwordHash);
         
         if (!$stmt->execute()) {
             $this->errors[] = "Registration failed";
@@ -241,6 +258,46 @@ class UserValidator {
         $hasNumber = preg_match('/[0-9]/', $password);
         
         return $hasUpper && $hasLower && $hasNumber;
+    }
+
+    /**
+     * Upgrade legacy plaintext student passwords after successful login
+     *
+     * @param int $userId
+     * @param string $password
+     * @return void
+     */
+    private function upgradeLegacyStudentPassword($userId, $password) {
+        $newHash = password_hash($password, PASSWORD_DEFAULT);
+        $stmt = $this->conn->prepare("UPDATE students SET password = ? WHERE id = ?");
+
+        if ($stmt) {
+            $stmt->bind_param("si", $newHash, $userId);
+            $stmt->execute();
+            $stmt->close();
+        }
+    }
+
+    /**
+     * Read the latest stored hash for a student
+     *
+     * @param int $userId
+     * @return string|null
+     */
+    private function getStoredPasswordHash($userId) {
+        $stmt = $this->conn->prepare("SELECT password FROM students WHERE id = ?");
+
+        if (!$stmt) {
+            return null;
+        }
+
+        $stmt->bind_param("i", $userId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
+        $stmt->close();
+
+        return $row['password'] ?? null;
     }
 }
 

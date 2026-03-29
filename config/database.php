@@ -23,16 +23,30 @@ $conn = @mysqli_connect($host, $user, $password, $database);
 
 // Check connection
 if (!$conn) {
-    // Log error if logger available
     if (function_exists('logError')) {
         logError('Database connection failed: ' . mysqli_connect_error(), 'CRITICAL');
     }
-    die("Database Connection Failed: " . mysqli_connect_error());
+
+    if (function_exists('handleError')) {
+        handleError('Database connection failed', 500);
+    }
+
+    http_response_code(500);
+    exit('Database connection failed.');
 }
 
 // Set charset
 if (!mysqli_set_charset($conn, DB_CHARSET)) {
-    die("Failed to set database charset");
+    if (function_exists('logError')) {
+        logError('Failed to set database charset', 'CRITICAL');
+    }
+
+    if (function_exists('handleError')) {
+        handleError('Database initialization failed', 500);
+    }
+
+    http_response_code(500);
+    exit('Database initialization failed.');
 }
 
 ?>
