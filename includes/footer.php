@@ -8,7 +8,7 @@
                 &copy; <span id="year"></span> <?php echo APP_NAME ?? 'Ahilya Student Desk'; ?>
             </p>
 
-            <div">
+            <div>
                 <a href="#" class="me-3">Privacy</a>
                 <a href="#" class="me-3">Terms</a>
                 <a href="#">Support</a>

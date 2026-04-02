@@ -1,65 +1,69 @@
 <?php
-session_start();
-include("../config/database.php");
+require_once __DIR__ . '/../includes/init.php';
 
-if(isset($_POST['login'])){
-
-$username = $_POST['username'];
-$password = $_POST['password'];
-
-$sql = "SELECT * FROM admins WHERE username=?";
-$stmt = $conn->prepare($sql);
-$stmt->bind_param("s", $username);
-$stmt->execute();
-
-$result = $stmt->get_result();
-
-if($result->num_rows > 0){
-
-$admin = $result->fetch_assoc();
-
-// VERIFY HASHED PASSWORD
-if(password_verify($password, $admin['password'])){
-
-$_SESSION['admin_id'] = $admin['id'];
-
-header("Location: dashboard.php");
-exit();
-
-}else{
-$error = "Wrong Password!";
+if (isAdminLoggedIn()) {
+    redirect('admin/dashboard.php');
 }
 
-}else{
-$error = "Admin Not Found!";
-}
+$error = '';
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
+        $error = 'Your session expired. Please try again.';
+    } else {
+        $username = getSafePost('username', '');
+        $password = $_POST['password'] ?? '';
+
+        $stmt = $conn->prepare("SELECT * FROM admins WHERE username = ?");
+
+        if ($stmt) {
+            $stmt->bind_param("s", $username);
+            $stmt->execute();
+            $admin = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+
+            if ($admin && password_verify($password, $admin['password'])) {
+                session_regenerate_id(true);
+                $_SESSION[ADMIN_SESSION_KEY] = (int) $admin['id'];
+                redirect('admin/dashboard.php');
+            }
+        }
+
+        $error = 'Invalid admin credentials.';
+    }
 }
 ?>
 
 <?php include("../includes/header.php"); ?>
 
-<div class="container border rounded-3 text-center w-50 py-5 my-5">
+<div class="container my-5 min-vh-100">
+    <div class="row justify-content-center">
+        <div class="col-md-6 col-lg-4">
+            <div class="card border-dark shadow-sm">
+                <div class="card-body p-4">
+                    <h3 class="text-center mb-4">Admin Login</h3>
 
-<h3>Admin Login</h3>
+                    <?php if (!empty($error)) echo errorAlert(htmlspecialchars($error)); ?>
 
-<?php if(isset($error)) echo "<p class='text-danger'>$error</p>"; ?>
+                    <form method="POST" novalidate>
+                        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrfToken()); ?>">
 
-<form method="POST">
+                        <div class="mb-3">
+                            <label class="form-label">Username</label>
+                            <input type="text" name="username" class="form-control" required autocomplete="username">
+                        </div>
 
-<input type="text" name="username" class="form-control mb-2" placeholder="Username" required>
+                        <div class="mb-3">
+                            <label class="form-label">Password</label>
+                            <input type="password" name="password" class="form-control" required autocomplete="current-password">
+                        </div>
 
-<input type="password" name="password" class="form-control mb-2" placeholder="Password" required>
-
-
-<div class="pt-1 mb-4">
-<button type="submit" name="login" class="btn btn-dark w-25">Login</button>
+                        <button type="submit" class="btn btn-dark w-100">Login</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
-
-</form>
-
-</div>
-
-
 
 <?php include("../includes/footer.php"); ?>

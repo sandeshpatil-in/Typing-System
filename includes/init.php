@@ -23,6 +23,9 @@ require_once __DIR__ . '/../config/database.php';
 // Load helpers
 require_once __DIR__ . '/helpers.php';
 
+// Load access and plan helpers
+require_once __DIR__ . '/access.php';
+
 // Load theme config
 require_once __DIR__ . '/../config/ThemeConfig.php';
 

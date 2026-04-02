@@ -39,19 +39,19 @@
             <!-- Right (Account) -->
             <ul class="navbar-nav ms-auto">
                   <li class="nav-item">
-                    <a class="nav-link <?php echo (function_exists('isCurrentPage') && isCurrentPage('index')) ? 'active' : ''; ?>" href="index.php">
+                    <a class="nav-link <?php echo (function_exists('isCurrentPage') && isCurrentPage('index')) ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>index.php">
                         Home
                     </a>
                 </li>
 
                 <li class="nav-item">
-                    <a class="nav-link <?php echo (function_exists('isCurrentPage') && isCurrentPage('about')) ? 'active' : ''; ?>" href="about.php">
+                    <a class="nav-link <?php echo (function_exists('isCurrentPage') && isCurrentPage('about')) ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>about.php">
                         About
                     </a>
                 </li>
 
                 <li class="nav-item">
-                    <a class="nav-link <?php echo (function_exists('isCurrentPage') && isCurrentPage('contact')) ? 'active' : ''; ?>" href="contact.php">
+                    <a class="nav-link <?php echo (function_exists('isCurrentPage') && isCurrentPage('contact')) ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>contact.php">
                         Contact
                     </a>
                 </li>
@@ -65,22 +65,22 @@
 
                         <?php if (function_exists('isStudentLoggedIn') && isStudentLoggedIn()): ?>
 
-                            <li><a class="dropdown-item" href="account/dashboard.php">Profile</a></li>
+                            <li><a class="dropdown-item" href="<?php echo BASE_URL; ?>account/dashboard.php">Profile</a></li>
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item text-danger" href="account/logout.php">Logout</a></li>
+                            <li><a class="dropdown-item text-danger" href="<?php echo BASE_URL; ?>account/logout.php">Logout</a></li>
 
                         <?php elseif (function_exists('isAdminLoggedIn') && isAdminLoggedIn()): ?>
 
-                            <li><a class="dropdown-item" href="admin/dashboard.php">Admin Dashboard</a></li>
+                            <li><a class="dropdown-item" href="<?php echo BASE_URL; ?>admin/dashboard.php">Admin Dashboard</a></li>
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item text-danger" href="admin/logout.php">Logout</a></li>
+                            <li><a class="dropdown-item text-danger" href="<?php echo BASE_URL; ?>admin/logout.php">Logout</a></li>
 
                         <?php else: ?>
 
-                            <li><a class="dropdown-item" href="account/login.php">Student Login</a></li>
-                            <li><a class="dropdown-item" href="account/register.php">Register</a></li>
+                            <li><a class="dropdown-item" href="<?php echo BASE_URL; ?>account/login.php">Student Login</a></li>
+                            <li><a class="dropdown-item" href="<?php echo BASE_URL; ?>account/register.php">Register</a></li>
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="admin/login.php">Admin Login</a></li>
+                            <li><a class="dropdown-item" href="<?php echo BASE_URL; ?>admin/login.php">Admin Login</a></li>
 
                         <?php endif; ?>
 

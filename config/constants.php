@@ -8,32 +8,107 @@
  * Professional enterprise-level structure
  */
 
+if (!function_exists('loadEnvFile')) {
+    function loadEnvFile($filePath) {
+        if (!is_file($filePath) || !is_readable($filePath)) {
+            return;
+        }
+
+        $lines = file($filePath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+
+        if ($lines === false) {
+            return;
+        }
+
+        foreach ($lines as $line) {
+            $line = trim($line);
+
+            if ($line === '' || str_starts_with($line, '#') || !str_contains($line, '=')) {
+                continue;
+            }
+
+            [$name, $value] = array_map('trim', explode('=', $line, 2));
+
+            if ($name === '') {
+                continue;
+            }
+
+            $value = trim($value, "\"'");
+
+            if (getenv($name) === false) {
+                putenv($name . '=' . $value);
+                $_ENV[$name] = $value;
+                $_SERVER[$name] = $value;
+            }
+        }
+    }
+}
+
+if (!function_exists('detectBaseUrl')) {
+    function detectBaseUrl($projectRoot) {
+        if (PHP_SAPI === 'cli' || empty($_SERVER['HTTP_HOST']) || empty($_SERVER['SCRIPT_NAME'])) {
+            return 'http://localhost/ahilya-typing/';
+        }
+
+        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $host = $_SERVER['HTTP_HOST'];
+        $scriptName = str_replace('\\', '/', (string) $_SERVER['SCRIPT_NAME']);
+        $scriptDir = str_replace('\\', '/', dirname($scriptName));
+        $scriptDir = $scriptDir === '.' ? '' : rtrim($scriptDir, '/');
+
+        $scriptFilename = isset($_SERVER['SCRIPT_FILENAME']) ? str_replace('\\', '/', (string) $_SERVER['SCRIPT_FILENAME']) : '';
+        $projectRoot = str_replace('\\', '/', rtrim((string) $projectRoot, '/'));
+        $currentDir = $scriptFilename !== '' ? str_replace('\\', '/', dirname($scriptFilename)) : '';
+        $relativeDir = '';
+
+        if ($currentDir !== '' && str_starts_with($currentDir, $projectRoot)) {
+            $relativeDir = trim(substr($currentDir, strlen($projectRoot)), '/');
+        }
+
+        $basePath = $scriptDir;
+        if ($relativeDir !== '' && str_ends_with($basePath, '/' . $relativeDir)) {
+            $basePath = substr($basePath, 0, -strlen('/' . $relativeDir));
+        }
+
+        $basePath = trim($basePath, '/');
+
+        return $scheme . '://' . $host . ($basePath !== '' ? '/' . $basePath : '') . '/';
+    }
+}
+
+loadEnvFile(dirname(dirname(__FILE__)) . '/.env');
+
 // ==========================================
 // DATABASE CONFIGURATION
 // ==========================================
-define('DB_HOST', 'localhost');
-define('DB_USER', 'root');
-define('DB_PASS', '');
-define('DB_NAME', 'ahilya_typing');
+define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
+define('DB_USER', getenv('DB_USER') ?: 'root');
+define('DB_PASS', getenv('DB_PASS') ?: '');
+define('DB_NAME', getenv('DB_NAME') ?: 'ahilya_typing');
 define('DB_CHARSET', 'utf8mb4');
+
+
+// infinityfree database configuration
 
 //define('DB_HOST', 'sql100.infinityfree.com');
 //define('DB_USER', 'if0_41473773');
 //define('DB_PASS', 'GhdmfRkqW9cX9');
-//define('DB_NAME', 'if0_41473773_ahilya');
+//define('DB_NAME', 'if0_41473773_ahilya_typing');
 //define('DB_CHARSET', 'utf8mb4');
+
 
 // ==========================================
 // APPLICATION CONFIGURATION
 // ==========================================
-define('APP_NAME', 'Ahilya Student Desk');
+define('APP_NAME', getenv('APP_NAME') ?: 'Ahilya Student Desk');
 define('APP_VERSION', '1.0.0');
-define('APP_ENV', 'production'); // development | production
+define('APP_ENV', getenv('APP_ENV') ?: 'production'); // development | production
 
 // ==========================================
 // PATH CONFIGURATION
 // ==========================================
-define('BASE_URL', 'http://localhost/ahilya-typing/');
+$baseUrl = getenv('BASE_URL') ?: detectBaseUrl(dirname(dirname(__FILE__)));
+define('BASE_URL', rtrim($baseUrl, '/') . '/');
 
 //define('BASE_URL', 'https://ahilyastudentdesk.rf.gd/');
 define('ROOT_PATH', dirname(dirname(__FILE__)));
@@ -53,12 +128,24 @@ define('ADMIN_SESSION_KEY', 'admin_id');
 define('MAX_LOGIN_ATTEMPTS', 5);
 define('LOGIN_ATTEMPT_TIMEOUT', 900); // 15 minutes
 define('PASSWORD_MIN_LENGTH', 6);
+define('GUEST_TEST_LIMIT', 5);
+define('PLAN_DURATION_DAYS', 30);
 
 // ==========================================
 // PAGINATION & LIMITS
 // ==========================================
 define('ITEMS_PER_PAGE', 10);
 define('TYPING_TEST_MAX_TIME', 600); // 10 minutes max
+
+// ==========================================
+// PAYMENT CONFIGURATION
+// ==========================================
+define('PLAN_NAME', 'Pro Monthly');
+define('PLAN_PRICE', 199.00);
+define('PLAN_PRICE_PAISE', (int) round(PLAN_PRICE * 100));
+define('PAYMENT_CURRENCY', 'INR');
+define('RAZORPAY_KEY_ID', getenv('RAZORPAY_KEY_ID') ?: '');
+define('RAZORPAY_KEY_SECRET', getenv('RAZORPAY_KEY_SECRET') ?: '');
 
 // ==========================================
 // ERROR HANDLING
