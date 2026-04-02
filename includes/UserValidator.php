@@ -182,7 +182,9 @@ class UserValidator {
             return false;
         }
 
-        if ((int) ($user['status'] ?? 0) !== 1) {
+        $status = strtolower(trim((string) ($user['status'] ?? '')));
+
+        if ($status !== '' && !in_array($status, ['0', '1', 'active', 'inactive'], true)) {
             $this->errors[] = "Your account is disabled";
             return false;
         }
@@ -222,10 +224,14 @@ class UserValidator {
         $name = sanitizeInput($data['name']);
         $email = sanitizeInput($data['email']);
         $passwordHash = password_hash($data['password'], PASSWORD_DEFAULT);
+        $studentStatus = function_exists('getStudentStatusValue')
+            ? getStudentStatusValue($this->conn, false)
+            : 0;
+        $statusPlaceholder = is_int($studentStatus) ? (string) $studentStatus : "'" . $this->conn->real_escape_string($studentStatus) . "'";
 
         $stmt = $this->conn->prepare(
             "INSERT INTO students (name, email, password, status, created_at) 
-             VALUES (?, ?, ?, 1, NOW())"
+             VALUES (?, ?, ?, {$statusPlaceholder}, NOW())"
         );
 
         if (!$stmt) {

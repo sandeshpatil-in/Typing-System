@@ -26,6 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($user && $validator->validateStudentStatus($user)) {
             loginStudent($user['id']);
+            linkGuestAttemptsToStudent($conn, (int) $user['id']);
             $user = syncStudentPlanStatus($conn, $user['id']);
 
             if (hasActivePlan($user)) {
@@ -33,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 redirect('account/dashboard.php');
             }
 
-            setFlash('auth_message', 'Login successful. Complete payment to unlock unlimited typing tests.');
+            setFlash('auth_message', 'Login successful. Complete Razorpay payment or ask admin to confirm your hand cash payment.');
             redirect('payment.php');
         }
 

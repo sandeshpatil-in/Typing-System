@@ -4,8 +4,9 @@ require_once __DIR__ . '/includes/init.php';
 $wpm = (int) getSafeGet('wpm', 0);
 $accuracy = (int) getSafeGet('accuracy', 0);
 $words = (int) getSafeGet('words', 0);
-$remaining = (int) getSafeGet('remaining', getGuestTestsRemaining());
+$remaining = (int) getSafeGet('remaining', getGuestTestsRemaining($conn));
 $accessType = getSafeGet('access', isStudentLoggedIn() ? 'paid' : 'guest');
+$guestLimitReached = $accessType === 'guest' && $remaining <= 0;
 ?>
 
 <?php include 'includes/header.php'; ?>
@@ -36,15 +37,18 @@ $accessType = getSafeGet('access', isStudentLoggedIn() ? 'paid' : 'guest');
 
       <?php if ($accessType === 'guest') { ?>
         <div class="alert alert-warning mt-4 mb-0">
-          <strong>Guest mode:</strong> You have <span id="remainingGuestTests"><?php echo $remaining; ?></span> free tests remaining.
-          <?php if ($remaining <= 0) { ?>
-            <div class="mt-2"><a href="account/register.php" class="btn btn-dark btn-sm">Create Account</a></div>
+          <?php if ($guestLimitReached) { ?>
+            <strong>Guest mode complete:</strong> Your <?php echo GUEST_TEST_LIMIT; ?> free typing tests are finished.
+            <div class="mt-2">Create an account, complete payment, and unlock full access for the next <?php echo PLAN_DURATION_DAYS; ?> days.</div>
+            <div class="mt-3"><a href="account/register.php" class="btn btn-dark btn-sm">Create Account to Continue</a></div>
+          <?php } else { ?>
+            <strong>Guest mode:</strong> You have <span id="remainingGuestTests"><?php echo $remaining; ?></span> free tests remaining.
           <?php } ?>
         </div>
       <?php } ?>
 
       <div class="d-flex flex-column flex-sm-row justify-content-around mt-4 gap-3">
-        <a href="typing-preference.php" class="btn btn-dark flex-fill">Restart</a>
+        <a href="<?php echo $guestLimitReached ? 'account/register.php' : 'typing-preference.php'; ?>" class="btn btn-dark flex-fill"><?php echo $guestLimitReached ? 'Create Account' : 'Restart'; ?></a>
         <a href="<?php echo $accessType === 'paid' ? 'account/dashboard.php' : 'index.php'; ?>" class="btn btn-outline-dark flex-fill">Exit</a>
       </div>
     </div>

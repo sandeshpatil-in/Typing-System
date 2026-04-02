@@ -31,25 +31,78 @@ $receipt = 'plan_' . $student['id'] . '_' . time();
 $order = createRazorpayOrder($receipt, PLAN_PRICE_PAISE);
 
 if (!$order || empty($order['id'])) {
-    jsonResponse(['success' => false, 'message' => 'Unable to create Razorpay order'], 500);
+    $errorMessage = is_array($order) ? ($order['error_message'] ?? null) : null;
+    jsonResponse([
+        'success' => false,
+        'message' => $errorMessage ?: 'Unable to create Razorpay order'
+    ], 500);
+}
+
+$hasPlanName = dbColumnExists($conn, 'plans', 'plan_name');
+$hasCurrency = dbColumnExists($conn, 'plans', 'currency');
+$hasRazorpayOrderId = dbColumnExists($conn, 'plans', 'razorpay_order_id');
+$hasPaymentId = dbColumnExists($conn, 'plans', 'payment_id');
+$hasPaymentStatus = dbColumnExists($conn, 'plans', 'payment_status');
+$hasPaymentMethod = dbColumnExists($conn, 'plans', 'payment_method');
+$hasCreatedAt = dbColumnExists($conn, 'plans', 'created_at');
+$pendingStatus = getPendingPlanStatusValue($conn);
+
+$columns = ['student_id', 'amount'];
+$placeholders = ['?', '?'];
+$types = 'id';
+$values = [(int) $student['id'], PLAN_PRICE];
+
+if ($hasPlanName) {
+    $columns[] = 'plan_name';
+    $placeholders[] = '?';
+    $types .= 's';
+    $values[] = PLAN_NAME;
+}
+
+if ($hasCurrency) {
+    $columns[] = 'currency';
+    $placeholders[] = '?';
+    $types .= 's';
+    $values[] = PAYMENT_CURRENCY;
+}
+
+if ($hasRazorpayOrderId) {
+    $columns[] = 'razorpay_order_id';
+    $placeholders[] = '?';
+    $types .= 's';
+    $values[] = $order['id'];
+} elseif ($hasPaymentId) {
+    $columns[] = 'payment_id';
+    $placeholders[] = '?';
+    $types .= 's';
+    $values[] = $order['id'];
+}
+
+if ($hasPaymentStatus) {
+    $columns[] = 'payment_status';
+    $placeholders[] = "'" . $conn->real_escape_string($pendingStatus) . "'";
+}
+
+if ($hasPaymentMethod) {
+    $columns[] = 'payment_method';
+    $placeholders[] = "'razorpay'";
+}
+
+if ($hasCreatedAt) {
+    $columns[] = 'created_at';
+    $placeholders[] = 'NOW()';
 }
 
 $stmt = $conn->prepare(
-    "INSERT INTO plans
-     (student_id, plan_name, amount, currency, razorpay_order_id, payment_status, created_at)
-     VALUES (?, ?, ?, ?, ?, 'created', NOW())"
+    "INSERT INTO plans (" . implode(', ', $columns) . ")
+     VALUES (" . implode(', ', $placeholders) . ")"
 );
 
 if (!$stmt) {
     jsonResponse(['success' => false, 'message' => 'Unable to save payment order'], 500);
 }
 
-$planName = PLAN_NAME;
-$amount = PLAN_PRICE;
-$currency = PAYMENT_CURRENCY;
-$orderId = $order['id'];
-$studentId = (int) $student['id'];
-$stmt->bind_param('isdss', $studentId, $planName, $amount, $currency, $orderId);
+$stmt->bind_param($types, ...$values);
 $stmt->execute();
 $stmt->close();
 

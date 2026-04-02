@@ -12,6 +12,10 @@ if (!defined('DB_HOST')) {
     require_once __DIR__ . '/constants.php';
 }
 
+if (function_exists('mysqli_report')) {
+    mysqli_report(MYSQLI_REPORT_OFF);
+}
+
 // Establish database connection
 $host = DB_HOST;
 $user = DB_USER;
@@ -19,7 +23,15 @@ $password = DB_PASS;
 $database = DB_NAME;
 
 // Create connection
-$conn = @mysqli_connect($host, $user, $password, $database);
+$conn = false;
+
+try {
+    $conn = @mysqli_connect($host, $user, $password, $database);
+} catch (Throwable $exception) {
+    if (function_exists('logError')) {
+        logError('Database connection exception: ' . $exception->getMessage(), 'CRITICAL');
+    }
+}
 
 // Check connection
 if (!$conn) {
@@ -36,7 +48,17 @@ if (!$conn) {
 }
 
 // Set charset
-if (!mysqli_set_charset($conn, DB_CHARSET)) {
+$charsetSet = false;
+
+try {
+    $charsetSet = mysqli_set_charset($conn, DB_CHARSET);
+} catch (Throwable $exception) {
+    if (function_exists('logError')) {
+        logError('Database charset exception: ' . $exception->getMessage(), 'CRITICAL');
+    }
+}
+
+if (!$charsetSet) {
     if (function_exists('logError')) {
         logError('Failed to set database charset', 'CRITICAL');
     }

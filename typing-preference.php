@@ -2,7 +2,7 @@
 require_once __DIR__ . '/includes/init.php';
 
 if (!isStudentLoggedIn()) {
-    syncGuestAttemptsWithClient($_GET['guest_attempts_used'] ?? null);
+    syncGuestAttemptsWithClient($_GET['guest_attempts_used'] ?? null, $conn);
 }
 
 $access = getAccessContext($conn);
@@ -14,6 +14,12 @@ if ($access['is_logged_in'] && !$access['has_active_plan']) {
 }
 
 $remainingTests = $access['guest_tests_remaining'];
+
+if (!$access['is_logged_in'] && $remainingTests <= 0) {
+    setFlash('auth_message', 'Your 5 free guest tests are finished. Create an account to continue and activate 30-day access.');
+    redirect('account/register.php');
+}
+
 $languages = [];
 $schemaReady = dbTableExists($conn, 'languages') && dbTableExists($conn, 'exam_types') && dbTableExists($conn, 'passages');
 
@@ -109,7 +115,7 @@ if ($schemaReady) {
             </div>
 
             <div class="d-flex flex-column flex-md-row justify-content-center gap-3 mt-4">
-              <button type="submit" class="btn btn-dark px-5 py-2" <?php echo $schemaReady ? '' : 'disabled'; ?>>Start Test</button>
+              <button type="submit" id="startTestBtn" class="btn btn-dark px-5 py-2" <?php echo $schemaReady ? '' : 'disabled'; ?>>Start Test</button>
 
               <?php if (!$access['is_logged_in']) { ?>
                 <a href="account/register.php" class="btn btn-outline-dark px-5 py-2">Sign Up for Unlimited Access</a>
@@ -136,8 +142,47 @@ const examTypeNameInput = document.getElementById('examTypeName');
 const loadingState = document.getElementById('loadingState');
 const passageHelp = document.getElementById('passageHelp');
 const typingPreferenceForm = document.getElementById('typingPreferenceForm');
+const startTestBtn = document.getElementById('startTestBtn');
 const guestTestsRemainingLabel = document.getElementById('guestTestsRemaining');
 const guestAttemptsUsedInput = document.getElementById('guestAttemptsUsed');
+let isCountdownRunning = false;
+
+function updateSubmissionFields() {
+  const selectedLanguage = languageSelect.options[languageSelect.selectedIndex];
+  const selectedExamType = examTypeSelect.options[examTypeSelect.selectedIndex];
+
+  languageNameInput.value = selectedLanguage?.text || '';
+  examTypeNameInput.value = selectedExamType?.dataset.name || selectedExamType?.text || '';
+  timeSecondsInput.value = String(Math.max(1, Number(timeMinutesInput.value || 1)) * 60);
+
+  if (guestAttemptsUsedInput && !isLoggedIn) {
+    guestAttemptsUsedInput.value = String(Number(localStorage.getItem('guestTestAttempts') || '0'));
+  }
+}
+
+function beginStartCountdown() {
+  if (!startTestBtn || isCountdownRunning) {
+    return;
+  }
+
+  isCountdownRunning = true;
+  let countdown = 5;
+  startTestBtn.disabled = true;
+  startTestBtn.textContent = `Starting in ${countdown}`;
+
+  const countdownTimer = window.setInterval(() => {
+    countdown--;
+
+    if (countdown > 0) {
+      startTestBtn.textContent = `Starting in ${countdown}`;
+      return;
+    }
+
+    window.clearInterval(countdownTimer);
+    startTestBtn.textContent = 'Opening Test...';
+    window.setTimeout(() => typingPreferenceForm.submit(), 300);
+  }, 1000);
+}
 
 function setLoading(isLoading) {
   loadingState.classList.toggle('d-none', !isLoading);
@@ -270,20 +315,15 @@ if (schemaReady) {
   });
 
   typingPreferenceForm.addEventListener('submit', (event) => {
-    const selectedLanguage = languageSelect.options[languageSelect.selectedIndex];
-    const selectedExamType = examTypeSelect.options[examTypeSelect.selectedIndex];
-
-    languageNameInput.value = selectedLanguage?.text || '';
-    examTypeNameInput.value = selectedExamType?.dataset.name || selectedExamType?.text || '';
-    timeSecondsInput.value = String(Math.max(1, Number(timeMinutesInput.value || 1)) * 60);
-    if (guestAttemptsUsedInput && !isLoggedIn) {
-      guestAttemptsUsedInput.value = String(Number(localStorage.getItem('guestTestAttempts') || '0'));
-    }
+    event.preventDefault();
+    updateSubmissionFields();
 
     if (!languageSelect.value || !examTypeSelect.value || !passageSelect.value) {
-      event.preventDefault();
       alert('Please select language, exam type, and passage first.');
+      return;
     }
+
+    beginStartCountdown();
   });
 }
 </script>

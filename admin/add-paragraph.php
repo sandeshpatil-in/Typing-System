@@ -140,6 +140,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="mt-3">
                 <label class="form-label">Paragraph Content</label>
                 <textarea name="content" rows="8" class="form-control border-dark" required><?php echo htmlspecialchars($formData['content']); ?></textarea>
+                <div class="form-text text-muted">Line breaks and paragraph spacing are shown in the student typing test exactly as entered here.</div>
             </div>
 
             <div class="mt-4">

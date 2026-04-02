@@ -1,6 +1,11 @@
 <?php
 http_response_code(500);
-require_once __DIR__ . '/../includes/init.php';
+$homeUrl = '/';
+
+if (!empty($_SERVER['HTTP_HOST'])) {
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $homeUrl = $scheme . '://' . $_SERVER['HTTP_HOST'] . '/';
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -15,7 +20,7 @@ require_once __DIR__ . '/../includes/init.php';
         <div class="text-center">
             <h1 class="display-4 fw-bold">500</h1>
             <p class="lead">Something went wrong on the server.</p>
-            <a href="<?php echo BASE_URL; ?>index.php" class="btn btn-dark">Back to Home</a>
+            <a href="<?php echo htmlspecialchars($homeUrl); ?>" class="btn btn-dark">Back to Home</a>
         </div>
     </div>
 </body>

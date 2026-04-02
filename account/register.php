@@ -36,7 +36,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($student) {
                 loginStudent($student['id']);
-                setFlash('auth_message', 'Signup successful. Complete payment to activate your 30-day plan.');
+                linkGuestAttemptsToStudent($conn, (int) $student['id']);
+                setFlash('auth_message', 'Signup successful. Pay with Razorpay or ask admin to activate your hand cash payment for 30-day access.');
                 redirect('payment.php');
             }
 
@@ -56,7 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="card border-dark shadow-sm">
                 <div class="card-body p-4 p-md-5">
                     <h3 class="text-center mb-3">Create Your Account</h3>
-                    <p class="text-center text-muted mb-4">Get 5 guest tests free, then upgrade for unlimited typing practice.</p>
+                    <p class="text-center text-muted mb-4">Get 5 guest tests free, then upgrade with Razorpay or admin hand cash activation for full access.</p>
 
                     <?php if (!empty($message)) echo successAlert(htmlspecialchars($message)); ?>
                     <?php if (!empty($error)) echo errorAlert(htmlspecialchars($error)); ?>

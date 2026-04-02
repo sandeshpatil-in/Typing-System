@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS students (
     name VARCHAR(100) NOT NULL,
     email VARCHAR(190) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,
-    status TINYINT(1) NOT NULL DEFAULT 1,
+    status TINYINT(1) NOT NULL DEFAULT 0,
     plan_start_date DATE DEFAULT NULL,
     expiry_date DATE DEFAULT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS plans (
     razorpay_payment_id VARCHAR(100) DEFAULT NULL,
     razorpay_signature VARCHAR(255) DEFAULT NULL,
     payment_status ENUM('created','paid','failed') NOT NULL DEFAULT 'created',
+    payment_method ENUM('razorpay','hand_cash') DEFAULT NULL,
     start_date DATE DEFAULT NULL,
     expiry_date DATE DEFAULT NULL,
     paid_at DATETIME DEFAULT NULL,

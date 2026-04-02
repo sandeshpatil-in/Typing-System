@@ -11,7 +11,30 @@ $activeStudentCount = 0;
 $paragraphCount = 0;
 $resultCount = 0;
 
-if ($studentResult = $conn->query("SELECT COUNT(*) AS total, SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) AS active_total FROM students")) {
+$studentCountQuery = "SELECT COUNT(*) AS total, 0 AS active_total FROM students";
+
+if (dbColumnExists($conn, 'students', 'expiry_date')) {
+    $studentCountQuery = "SELECT COUNT(*) AS total, SUM(CASE WHEN expiry_date IS NOT NULL AND expiry_date >= NOW() THEN 1 ELSE 0 END) AS active_total FROM students";
+} elseif (dbTableExists($conn, 'plans')) {
+    $planCondition = getPaidPlanCondition($conn, 'p');
+    $studentCountQuery = "
+        SELECT
+            COUNT(*) AS total,
+            SUM(CASE WHEN latest_expiry IS NOT NULL AND latest_expiry >= NOW() THEN 1 ELSE 0 END) AS active_total
+        FROM (
+            SELECT
+                s.id,
+                (SELECT p.expiry_date
+                 FROM plans p
+                 WHERE p.student_id = s.id AND {$planCondition}
+                 ORDER BY COALESCE(p.expiry_date, '0000-00-00') DESC, p.id DESC
+                 LIMIT 1) AS latest_expiry
+            FROM students s
+        ) AS student_plan_summary
+    ";
+}
+
+if ($studentResult = $conn->query($studentCountQuery)) {
     $counts = $studentResult->fetch_assoc();
     $studentCount = (int) ($counts['total'] ?? 0);
     $activeStudentCount = (int) ($counts['active_total'] ?? 0);
@@ -62,7 +85,7 @@ if (function_exists('dbTableExists') && dbTableExists($conn, 'test_attempts')) {
                 <?php if ($page === 'home') { ?>
                     <div class="mb-4">
                         <h2 class="fw-bold mb-1">Welcome to Admin Dashboard</h2>
-                        <p class="text-muted mb-0">Activate students, manage exam-wise passages, and review typing activity from one place.</p>
+                        <p class="text-muted mb-0">Activate hand cash students, manage exam-wise passages, and review typing activity from one place.</p>
                     </div>
 
                     <div class="row g-3">

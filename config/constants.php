@@ -8,6 +8,76 @@
  * Professional enterprise-level structure
  */
 
+if (!function_exists('loadEnvFile')) {
+    function loadEnvFile($filePath) {
+        if (!is_file($filePath) || !is_readable($filePath)) {
+            return;
+        }
+
+        $lines = file($filePath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+
+        if ($lines === false) {
+            return;
+        }
+
+        foreach ($lines as $line) {
+            $line = trim($line);
+
+            if ($line === '' || str_starts_with($line, '#') || !str_contains($line, '=')) {
+                continue;
+            }
+
+            [$name, $value] = array_map('trim', explode('=', $line, 2));
+
+            if ($name === '') {
+                continue;
+            }
+
+            $value = trim($value, "\"'");
+
+            if (getenv($name) === false) {
+                putenv($name . '=' . $value);
+                $_ENV[$name] = $value;
+                $_SERVER[$name] = $value;
+            }
+        }
+    }
+}
+
+if (!function_exists('detectBaseUrl')) {
+    function detectBaseUrl($projectRoot) {
+        if (PHP_SAPI === 'cli' || empty($_SERVER['HTTP_HOST']) || empty($_SERVER['SCRIPT_NAME'])) {
+            return 'http://localhost/ahilya-typing/';
+        }
+
+        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $host = $_SERVER['HTTP_HOST'];
+        $scriptName = str_replace('\\', '/', (string) $_SERVER['SCRIPT_NAME']);
+        $scriptDir = str_replace('\\', '/', dirname($scriptName));
+        $scriptDir = $scriptDir === '.' ? '' : rtrim($scriptDir, '/');
+
+        $scriptFilename = isset($_SERVER['SCRIPT_FILENAME']) ? str_replace('\\', '/', (string) $_SERVER['SCRIPT_FILENAME']) : '';
+        $projectRoot = str_replace('\\', '/', rtrim((string) $projectRoot, '/'));
+        $currentDir = $scriptFilename !== '' ? str_replace('\\', '/', dirname($scriptFilename)) : '';
+        $relativeDir = '';
+
+        if ($currentDir !== '' && str_starts_with($currentDir, $projectRoot)) {
+            $relativeDir = trim(substr($currentDir, strlen($projectRoot)), '/');
+        }
+
+        $basePath = $scriptDir;
+        if ($relativeDir !== '' && str_ends_with($basePath, '/' . $relativeDir)) {
+            $basePath = substr($basePath, 0, -strlen('/' . $relativeDir));
+        }
+
+        $basePath = trim($basePath, '/');
+
+        return $scheme . '://' . $host . ($basePath !== '' ? '/' . $basePath : '') . '/';
+    }
+}
+
+loadEnvFile(dirname(dirname(__FILE__)) . '/.env');
+
 // ==========================================
 // DATABASE CONFIGURATION
 // ==========================================
@@ -17,11 +87,15 @@ define('DB_PASS', getenv('DB_PASS') ?: '');
 define('DB_NAME', getenv('DB_NAME') ?: 'ahilya_typing');
 define('DB_CHARSET', 'utf8mb4');
 
+
+// infinityfree database configuration
+
 //define('DB_HOST', 'sql100.infinityfree.com');
 //define('DB_USER', 'if0_41473773');
 //define('DB_PASS', 'GhdmfRkqW9cX9');
-//define('DB_NAME', 'if0_41473773_ahilya');
+//define('DB_NAME', 'if0_41473773_ahilya_typing');
 //define('DB_CHARSET', 'utf8mb4');
+
 
 // ==========================================
 // APPLICATION CONFIGURATION
@@ -33,7 +107,7 @@ define('APP_ENV', getenv('APP_ENV') ?: 'production'); // development | productio
 // ==========================================
 // PATH CONFIGURATION
 // ==========================================
-$baseUrl = getenv('BASE_URL') ?: 'http://localhost/ahilya-typing/';
+$baseUrl = getenv('BASE_URL') ?: detectBaseUrl(dirname(dirname(__FILE__)));
 define('BASE_URL', rtrim($baseUrl, '/') . '/');
 
 //define('BASE_URL', 'https://ahilyastudentdesk.rf.gd/');

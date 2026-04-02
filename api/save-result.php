@@ -10,7 +10,7 @@ if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
 }
 
 if (!isStudentLoggedIn()) {
-    syncGuestAttemptsWithClient($_POST['guest_attempts_used'] ?? null);
+    syncGuestAttemptsWithClient($_POST['guest_attempts_used'] ?? null, $conn);
 }
 
 $access = getAccessContext($conn);
@@ -59,8 +59,8 @@ if (!$attemptId) {
 $remaining = $access['guest_tests_remaining'];
 
 if (!$access['is_logged_in']) {
-    incrementGuestAttemptsUsed();
-    $remaining = getGuestTestsRemaining();
+    incrementGuestAttemptsUsed($conn);
+    $remaining = getGuestTestsRemaining($conn);
 }
 
 jsonResponse([

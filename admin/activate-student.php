@@ -21,30 +21,107 @@ if ($id <= 0) {
     redirect('admin/dashboard.php?page=students');
 }
 
-$startDate = date('Y-m-d');
-$expiryDate = date('Y-m-d', strtotime('+' . PLAN_DURATION_DAYS . ' days'));
+$student = getStudentById($conn, $id);
+
+if (!$student) {
+    setFlash('admin_student_message', 'Student not found.');
+    redirect('admin/dashboard.php?page=students');
+}
+
+$dates = calculatePlanDates($student['expiry_date'] ?? null);
+$startDate = $dates['start_date'];
+$expiryDate = $dates['expiry_date'];
 
 if (function_exists('dbTableExists') && dbTableExists($conn, 'plans')) {
     $hasPlanName = function_exists('dbColumnExists') && dbColumnExists($conn, 'plans', 'plan_name');
     $hasCurrency = function_exists('dbColumnExists') && dbColumnExists($conn, 'plans', 'currency');
     $hasPaymentStatus = function_exists('dbColumnExists') && dbColumnExists($conn, 'plans', 'payment_status');
+    $hasPaymentMethod = function_exists('dbColumnExists') && dbColumnExists($conn, 'plans', 'payment_method');
     $hasPaidAt = function_exists('dbColumnExists') && dbColumnExists($conn, 'plans', 'paid_at');
     $hasCreatedAt = function_exists('dbColumnExists') && dbColumnExists($conn, 'plans', 'created_at');
     $hasPaymentId = function_exists('dbColumnExists') && dbColumnExists($conn, 'plans', 'payment_id');
     $hasStatus = function_exists('dbColumnExists') && dbColumnExists($conn, 'plans', 'status');
 
-    if ($hasPlanName) {
+    if ($hasPlanName && $hasPaymentStatus) {
+        $columns = ['student_id', 'plan_name', 'amount', 'start_date', 'expiry_date'];
+        $placeholders = ['?', '?', '?', '?', '?'];
+        $types = 'isdss';
+        $values = [$id, 'Hand Cash Activation', 0.00, $startDate, $expiryDate];
+
+        if ($hasCurrency) {
+            $columns[] = 'currency';
+            $placeholders[] = '?';
+            $types .= 's';
+            $values[] = PAYMENT_CURRENCY;
+        }
+
+        if ($hasPaymentMethod) {
+            $columns[] = 'payment_method';
+            $placeholders[] = '?';
+            $types .= 's';
+            $values[] = 'hand_cash';
+        }
+
+        $columns[] = 'payment_status';
+        $placeholders[] = "'paid'";
+
+        if ($hasPaidAt) {
+            $columns[] = 'paid_at';
+            $placeholders[] = 'NOW()';
+        }
+
+        if ($hasCreatedAt) {
+            $columns[] = 'created_at';
+            $placeholders[] = 'NOW()';
+        }
+
         $stmt = $conn->prepare(
-            "INSERT INTO plans
-             (student_id, plan_name, amount, currency, payment_status, start_date, expiry_date, paid_at, created_at)
-             VALUES (?, ?, ?, ?, 'paid', ?, ?, NOW(), NOW())"
+            "INSERT INTO plans (" . implode(', ', $columns) . ")
+             VALUES (" . implode(', ', $placeholders) . ")"
         );
 
         if ($stmt) {
-            $planName = 'Manual Admin Activation';
-            $amount = 0.00;
-            $currency = PAYMENT_CURRENCY;
-            $stmt->bind_param('isdsss', $id, $planName, $amount, $currency, $startDate, $expiryDate);
+            $stmt->bind_param($types, ...$values);
+            $stmt->execute();
+            $stmt->close();
+        }
+    } elseif ($hasPlanName) {
+        $columns = ['student_id', 'plan_name', 'amount', 'start_date', 'expiry_date'];
+        $placeholders = ['?', '?', '?', '?', '?'];
+        $types = 'isdss';
+        $values = [$id, 'Hand Cash Activation', 0.00, $startDate, $expiryDate];
+
+        if ($hasCurrency) {
+            $columns[] = 'currency';
+            $placeholders[] = '?';
+            $types .= 's';
+            $values[] = PAYMENT_CURRENCY;
+        }
+
+        if ($hasPaymentMethod) {
+            $columns[] = 'payment_method';
+            $placeholders[] = '?';
+            $types .= 's';
+            $values[] = 'hand_cash';
+        }
+
+        if ($hasPaidAt) {
+            $columns[] = 'paid_at';
+            $placeholders[] = 'NOW()';
+        }
+
+        if ($hasCreatedAt) {
+            $columns[] = 'created_at';
+            $placeholders[] = 'NOW()';
+        }
+
+        $stmt = $conn->prepare(
+            "INSERT INTO plans (" . implode(', ', $columns) . ")
+             VALUES (" . implode(', ', $placeholders) . ")"
+        );
+
+        if ($stmt) {
+            $stmt->bind_param($types, ...$values);
             $stmt->execute();
             $stmt->close();
         }
@@ -69,6 +146,13 @@ if (function_exists('dbTableExists') && dbTableExists($conn, 'plans')) {
         if ($hasPaymentStatus) {
             $columns[] = 'payment_status';
             $placeholders[] = "'paid'";
+        }
+
+        if ($hasPaymentMethod) {
+            $columns[] = 'payment_method';
+            $placeholders[] = '?';
+            $types .= 's';
+            $values[] = 'hand_cash';
         }
 
         if ($hasStatus) {
@@ -107,46 +191,8 @@ if (function_exists('dbTableExists') && dbTableExists($conn, 'plans')) {
     }
 }
 
-$hasPlanStartDate = function_exists('dbColumnExists') && dbColumnExists($conn, 'students', 'plan_start_date');
-$hasExpiryDate = function_exists('dbColumnExists') && dbColumnExists($conn, 'students', 'expiry_date');
-$studentStmt = null;
-
-if ($hasPlanStartDate && $hasExpiryDate) {
-    $studentStmt = $conn->prepare(
-        "UPDATE students
-         SET status = 1, plan_start_date = ?, expiry_date = ?
-         WHERE id = ?"
-    );
-
-    if ($studentStmt) {
-        $studentStmt->bind_param('ssi', $startDate, $expiryDate, $id);
-    }
-} elseif ($hasExpiryDate) {
-    $studentStmt = $conn->prepare(
-        "UPDATE students
-         SET status = 1, expiry_date = ?
-         WHERE id = ?"
-    );
-
-    if ($studentStmt) {
-        $studentStmt->bind_param('si', $expiryDate, $id);
-    }
-} else {
-    $studentStmt = $conn->prepare(
-        "UPDATE students
-         SET status = 1
-         WHERE id = ?"
-    );
-
-    if ($studentStmt) {
-        $studentStmt->bind_param('i', $id);
-    }
-}
-
-if ($studentStmt) {
-    $studentStmt->execute();
-    $studentStmt->close();
-    setFlash('admin_student_message', 'Student activated successfully and status changed to Active.');
+if (updateStudentPlanAccess($conn, $id, true, $startDate, $expiryDate)) {
+    setFlash('admin_student_message', 'Hand cash activation saved. Student access is active for the next 30 days.');
 } else {
     setFlash('admin_student_message', 'Unable to activate the student.');
 }
