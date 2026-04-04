@@ -32,7 +32,7 @@ Create `.env` in the project root with values based on `.env.example`.
 Example:
 
 ```env
-APP_NAME=Ahilya Student Desk
+APP_NAME=Ahilya Typing
 APP_ENV=production
 BASE_URL=https://your-domain.com/
 DB_HOST=localhost

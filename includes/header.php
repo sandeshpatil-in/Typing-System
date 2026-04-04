@@ -7,7 +7,7 @@
     <!-- Meta -->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo defined('APP_NAME') ? APP_NAME : 'Ahilya Student Desk'; ?></title>
+    <title><?php echo defined('APP_NAME') ? APP_NAME : 'Ahilya Typing'; ?></title>
 
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -24,7 +24,7 @@
 
         <!-- Logo -->
         <a class="navbar-brand fw-bold" href="<?php echo defined('BASE_URL') ? BASE_URL : 'index.php'; ?>">
-            <?php echo defined('APP_NAME') ? APP_NAME : 'Student Desk'; ?>
+            <?php echo defined('APP_NAME') ? APP_NAME : 'Ahilya Typing'; ?>
         </a>
 
         <!-- Mobile Toggle -->

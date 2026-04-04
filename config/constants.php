@@ -100,9 +100,13 @@ define('DB_CHARSET', 'utf8mb4');
 // ==========================================
 // APPLICATION CONFIGURATION
 // ==========================================
-define('APP_NAME', getenv('APP_NAME') ?: 'Ahilya Student Desk');
+define('APP_NAME', getenv('APP_NAME') ?: 'Ahilya Typing');
 define('APP_VERSION', '1.0.0');
 define('APP_ENV', getenv('APP_ENV') ?: 'production'); // development | production
+define('APP_TIMEZONE', getenv('APP_TIMEZONE') ?: 'Asia/Kolkata');
+
+// Ensure all date/time functions use Indian Standard Time
+date_default_timezone_set(APP_TIMEZONE);
 
 // ==========================================
 // PATH CONFIGURATION
@@ -110,7 +114,7 @@ define('APP_ENV', getenv('APP_ENV') ?: 'production'); // development | productio
 $baseUrl = getenv('BASE_URL') ?: detectBaseUrl(dirname(dirname(__FILE__)));
 define('BASE_URL', rtrim($baseUrl, '/') . '/');
 
-//define('BASE_URL', 'https://ahilyastudentdesk.rf.gd/');
+//define('BASE_URL', 'https://ahilyatyping.com/');
 define('ROOT_PATH', dirname(dirname(__FILE__)));
 define('ASSETS_PATH', ROOT_PATH . '/assets/');
 define('INCLUDES_PATH', ROOT_PATH . '/includes/');

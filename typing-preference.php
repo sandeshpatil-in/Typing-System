@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/init.php';
+/** @var mysqli $conn */
 
 if (!isStudentLoggedIn()) {
     syncGuestAttemptsWithClient($_GET['guest_attempts_used'] ?? null, $conn);
@@ -75,10 +76,10 @@ if ($schemaReady) {
             <input type="hidden" name="guest_attempts_used" id="guestAttemptsUsed" value="<?php echo (int) $access['guest_attempts_used']; ?>">
 
             <div class="row g-3">
-              <div class="col-md-3">
+              <div class="col-md-2">
                 <label class="form-label">Language</label>
                 <select name="language_id" id="languageSelect" class="form-select border-dark" <?php echo $schemaReady ? '' : 'disabled'; ?> required>
-                  <option value="">Select language</option>
+                  <option value="">Select</option>
                   <?php foreach ($languages as $language) { ?>
                     <option value="<?php echo (int) $language['id']; ?>">
                       <?php echo htmlspecialchars($language['name']); ?>
@@ -87,25 +88,34 @@ if ($schemaReady) {
                 </select>
               </div>
 
-              <div class="col-md-3">
+              <div class="col-md-2">
                 <label class="form-label">Exam Type</label>
                 <select name="exam_type_id" id="examTypeSelect" class="form-select border-dark" disabled required>
-                  <option value="">Select language first</option>
+                  <option value="">Select</option>
                 </select>
               </div>
 
               <div class="col-md-3">
                 <label class="form-label">Passage</label>
                 <select name="paragraph" id="passageSelect" class="form-select border-dark" disabled required>
-                  <option value="">Select exam type first</option>
+                  <option value="">Select</option>
                 </select>
                 <div id="passageHelp" class="form-text">Choose a passage that matches your selected language and exam.</div>
               </div>
 
-              <div class="col-md-3">
+              <div class="col-md-2">
                 <label class="form-label">Time (minutes)</label>
                 <input type="number" id="timeMinutes" class="form-control border-dark" min="1" max="30" value="5" <?php echo $schemaReady ? '' : 'disabled'; ?> required>
                 <div class="form-text">Auto-filled from exam type, but you can edit it.</div>
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Backspace</label>
+                <select name="backspace" id="backspaceSelect" class="form-select border-dark">
+                  <option value="on" selected>On</option>
+                  <option value="off">Off</option>
+                </select>
+                <div class="form-text">Control whether backspace is allowed during the test.</div>
               </div>
             </div>
 

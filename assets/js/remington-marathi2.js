@@ -7,6 +7,8 @@ function initRemingtonTyping(language) {
   if (!typingArea) return;
 
   const resolvedLanguage = String(language || "").toLowerCase();
+  const isSupported = resolvedLanguage === "marathi" || resolvedLanguage === "hindi";
+  const allowBackspace = !!(window.typingOptions ? window.typingOptions.allowBackspace : true);
 
   // CDAC/GIST Remington Marathi keyboard layout.
   // Blue characters in the keyboard chart = normalMap.
@@ -23,7 +25,7 @@ function initRemingtonTyping(language) {
     "8": "८",
     "9": "९",
     "0": "०",
-    "-": "-",
+    "-": "ञ",
     "=": "ृ",
 
     q: "ु",
@@ -38,7 +40,7 @@ function initRemingtonTyping(language) {
     p: "च",
     "[": "ख्",
     "]": ",",
-    "\\": "ृ",
+    "\\": ".",
 
     a: "ं",
     s: "े",
@@ -52,7 +54,7 @@ function initRemingtonTyping(language) {
     ";": "य",
     "'": "श्",
 
-    z: "्र",
+    z: "र",
     x: "ग",
     c: "ब",
     v: "अ",
@@ -65,7 +67,7 @@ function initRemingtonTyping(language) {
   };
 
   const shiftMap = {
-    "~": "द्य",
+    "~": "",
     "!": "ङ",
     "@": "/",
     "#": ":",
@@ -120,10 +122,12 @@ function initRemingtonTyping(language) {
   const altMap = {};
 
   typingArea.addEventListener("keydown", function (e) {
-    if (resolvedLanguage !== "marathi") return;
+    if (!isSupported) return;
     if (e.ctrlKey) return;
 
     if (e.key === "Backspace") {
+      if (allowBackspace) return;
+
       e.preventDefault();
 
       const start = this.selectionStart;

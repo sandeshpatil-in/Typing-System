@@ -21,6 +21,9 @@ $attemptCount = (int) ($attemptSummary['total'] ?? 0);
 $planName = $plan['plan_name'] ?? ($paymentLabel === 'Hand Cash' ? 'Hand Cash Activation' : PLAN_NAME);
 $planStart = $plan['start_date'] ?? ($student['plan_start_date'] ?? 'Not started');
 $planExpiry = $plan['expiry_date'] ?? ($student['expiry_date'] ?? 'Not active');
+$planStartDisplay = !empty($planStart) && $planStart !== 'Not started' ? formatDate($planStart) : 'Not started';
+$planExpiryDisplay = !empty($planExpiry) && $planExpiry !== 'Not active' ? formatDate($planExpiry) : 'Not active';
+$studentExpiryDisplay = !empty($student['expiry_date']) ? formatDate($student['expiry_date']) : 'Not active';
 
 $attempts = getStudentAttemptsResult($conn, (int) $student['id'], 20);
 ?>
@@ -38,7 +41,7 @@ $attempts = getStudentAttemptsResult($conn, (int) $student['id'], 20);
                     <p class="mb-2"><strong>Email:</strong> <?php echo htmlspecialchars($student['email']); ?></p>
                     <p class="mb-2"><strong>Plan:</strong> <?php echo $hasPlan ? 'Active' : 'Inactive'; ?></p>
                     <p class="mb-2"><strong>Payment:</strong> <?php echo htmlspecialchars($paymentLabel); ?></p>
-                    <p class="mb-4"><strong>Expiry:</strong> <?php echo htmlspecialchars((string) ($student['expiry_date'] ?? 'Not active')); ?></p>
+                    <p class="mb-4"><strong>Expiry:</strong> <?php echo htmlspecialchars($studentExpiryDisplay); ?></p>
 
                     <?php if ($hasPlan) { ?>
                         <a href="../typing-preference.php" class="btn btn-dark w-100 mb-2">Start Typing</a>
@@ -76,8 +79,8 @@ $attempts = getStudentAttemptsResult($conn, (int) $student['id'], 20);
                         <div class="row">
                             <div class="col-md-3"><strong>Plan</strong><div><?php echo htmlspecialchars($planName); ?></div></div>
                             <div class="col-md-3"><strong>Payment</strong><div><?php echo htmlspecialchars($paymentLabel); ?></div></div>
-                            <div class="col-md-3"><strong>Started</strong><div><?php echo htmlspecialchars((string) $planStart); ?></div></div>
-                            <div class="col-md-3"><strong>Expires</strong><div><?php echo htmlspecialchars((string) $planExpiry); ?></div></div>
+                            <div class="col-md-3"><strong>Started</strong><div><?php echo htmlspecialchars($planStartDisplay); ?></div></div>
+                            <div class="col-md-3"><strong>Expires</strong><div><?php echo htmlspecialchars($planExpiryDisplay); ?></div></div>
                         </div>
                     <?php } else { ?>
                         <p class="mb-0 text-muted">No paid plan found yet. Complete Razorpay payment or ask admin to confirm your hand cash payment to unlock unlimited tests.</p>
@@ -112,7 +115,7 @@ $attempts = getStudentAttemptsResult($conn, (int) $student['id'], 20);
 
                                 <?php while ($attempts && ($row = $attempts->fetch_assoc())) { ?>
                                     <tr>
-                                        <td><?php echo htmlspecialchars($row['created_at']); ?></td>
+                                        <td><?php echo htmlspecialchars(formatDate($row['created_at'])); ?></td>
                                         <td>
                                             <span class="badge <?php echo ($row['access_type'] ?? 'paid') === 'guest' ? 'text-bg-warning text-dark' : 'text-bg-success'; ?>">
                                                 <?php echo htmlspecialchars(ucfirst((string) ($row['access_type'] ?? 'paid'))); ?>

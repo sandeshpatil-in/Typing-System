@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/init.php';
+/** @var mysqli $conn */
 
 if (!isStudentLoggedIn()) {
     syncGuestAttemptsWithClient($_GET['guest_attempts_used'] ?? null, $conn);
@@ -13,6 +14,8 @@ $passageId = (int) getSafeGet('paragraph', 1);
 $language = getSafeGet('language', 'english');
 $time = (int) getSafeGet('time', 60);
 $exam = getSafeGet('exam_type', 'normal');
+$allowBackspace = strtolower((string) getSafeGet('backspace', 'on')) !== 'off';
+$baseFontSize = 16;
 $normalizedLanguage = strtolower(trim((string) $language));
 $isIndicLanguage = in_array($normalizedLanguage, ['marathi', 'hindi'], true);
 
@@ -55,7 +58,7 @@ if (dbTableExists($conn, 'passages') && dbTableExists($conn, 'languages') && dbT
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<title>Typing Test</title>
+<title><?php echo APP_NAME; ?> - Typing Test</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;500;700;900&display=swap" rel="stylesheet">
@@ -85,14 +88,17 @@ body {
 .box {
   padding:15px;
   scroll-behavior: smooth;
+  min-height: 240px;
 }
 #paragraphText, #typingArea {
-  font-size:18px;
+  font-size:12px;
   line-height:1.6;
-  font-family: 'Lato', sans-serif;
 }
 .indic-text {
   font-family: 'Mangal', 'Nirmala UI', 'Noto Sans Devanagari', sans-serif !important;
+}
+.latin-text {
+  font-family: 'Times New Roman', Times, serif !important;
 }
 #paragraphText {
   border: 1px solid #333;
@@ -101,6 +107,7 @@ body {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
+  user-select: none;
 }
 .full-height {
   height:calc(100vh - 70px);
@@ -108,6 +115,10 @@ body {
 textarea {
   resize:none;
   font-family: 'Lato', sans-serif;
+}
+.layout-tb #paragraphBox .box,
+.layout-tb #typingBox .box {
+  max-height: 45vh;
 }
 .topbar .toolbar-group {
   display:flex;
@@ -124,7 +135,7 @@ textarea {
   max-width: 90vw;
   background: rgba(255, 255, 255, 0.98);
   border: 1px solid #222;
-  border-radius: 14px;
+  border-radius: 4px;
   box-shadow: 0 1px 5px rgba(0, 0, 0, 0.24);
   overflow: hidden;
   z-index: 1055;
@@ -136,7 +147,6 @@ textarea {
 .keyboard-header {
   cursor: move;
   background: #111;
-  color: #fff;
   padding: 4px 6px;
   display: flex;
   align-items: center;
@@ -150,31 +160,27 @@ textarea {
   display: flex;
   align-items: center;
   gap: 8px;
+
 }
 .keyboard-tools button {
   border: 0;
-  border-radius: 5px;
+  border-radius: 2px;
   background: #f3f3f3;
   color: #111;
-  padding: 4px 8px;
+  padding: 6px 6px;
   font-size: 12px;
 }
 .keyboard-body {
   background: #f8f8f8;
-  padding: 1px;
+  padding: 0px;
 }
 .keyboard-body img {
   display: block;
   width: 100%;
   height: auto;
-  border-radius: 8px;
   border: 1px solid #d4d4d4;
 }
-.keyboard-note {
-  margin-top: 8px;
-  font-size: 12px;
-  color: #555;
-}
+
 @media (max-width: 768px) {
   .topbar {
     padding: 12px;
@@ -212,12 +218,17 @@ textarea {
 
   <div class="toolbar-group">
     <?php if ($isIndicLanguage) { ?>
-      <button type="button" id="keyboardToggleBtn" class="btn btn-light btn-sm"><i class="fas fa-keyboard"></i>K</button>
+      <button type="button" id="keyboardToggleBtn" class="btn btn-light btn-sm"><i class="fas fa-keyboard"></i>Keyboard</button>
     <?php } ?>
 
     <button type="button" class="btn btn-light btn-sm" onclick="setLayout('lr')" title="Left-Right"><i class="fas fa-arrows-alt-h">LR</i></button>
     <button type="button" class="btn btn-light btn-sm" onclick="setLayout('tb')" title="Top-Bottom"><i class="fas fa-arrows-alt-v">TB</i></button>
     <button type="button" class="btn btn-light btn-sm" onclick="setLayout('single')" title="Single View"><i class="fas fa-square">S</i></button>
+    <div class="d-flex align-items-center gap-1 ms-2">
+      <button type="button" id="fontSizeDown" class="btn btn-light btn-sm" title="Decrease font size">A-</button>
+      <span id="fontSizeValue" class="text-light small px-1">12px</span>
+      <button type="button" id="fontSizeUp" class="btn btn-light btn-sm" title="Increase font size">A+</button>
+    </div>
     <button type="button" id="submitTestBtn" class="btn btn-light btn-sm" onclick="submitTest()"><i class="fas fa-check"></i> Submit</button>
   </div>
 </div>
@@ -227,14 +238,14 @@ textarea {
     <div id="paragraphBox" class="col-md-6 h-100">
       <div class="box overflow-auto h-100">
         <h5>Paragraph</h5>
-        <pre id="paragraphText" class="<?php echo $isIndicLanguage ? 'indic-text' : ''; ?>"><?php echo htmlspecialchars($paragraph); ?></pre>
+        <pre id="paragraphText" class="<?php echo $isIndicLanguage ? 'indic-text' : 'latin-text'; ?>" style="font-size: <?php echo $baseFontSize; ?>px;"><?php echo htmlspecialchars($paragraph); ?></pre>
       </div>
     </div>
 
     <div id="typingBox" class="col-md-6 h-100">
       <div class="box h-100 d-flex flex-column">
         <h5>Start Typing</h5>
-        <textarea id="typingArea" class="form-control flex-grow-1 <?php echo $isIndicLanguage ? 'indic-text' : ''; ?>" placeholder="Start typing here..." autofocus></textarea>
+        <textarea id="typingArea" class="form-control flex-grow-1 <?php echo $isIndicLanguage ? 'indic-text' : 'latin-text'; ?>" placeholder="Start typing here..." autofocus style="font-size: <?php echo $baseFontSize; ?>px;"></textarea>
       </div>
     </div>
   </div>
@@ -263,6 +274,10 @@ const timerEl = document.getElementById('timer');
 const submitTestBtn = document.getElementById('submitTestBtn');
 const isLoggedIn = <?php echo $access['is_logged_in'] ? 'true' : 'false'; ?>;
 const isIndicLanguage = <?php echo $isIndicLanguage ? 'true' : 'false'; ?>;
+const allowBackspace = <?php echo $allowBackspace ? 'true' : 'false'; ?>;
+const typingOptions = {
+  allowBackspace: allowBackspace
+};
 const csrfToken = '<?php echo htmlspecialchars(csrfToken()); ?>';
 let isSubmitting = false;
 const testPayload = {
@@ -281,6 +296,48 @@ const keyboardDragHandle = document.getElementById('keyboardDragHandle');
 const keyboardSizeUp = document.getElementById('keyboardSizeUp');
 const keyboardSizeDown = document.getElementById('keyboardSizeDown');
 const keyboardStorageKey = `floatingKeyboard:${testPayload.language}`;
+const fontSizeValue = document.getElementById('fontSizeValue');
+const fontSizeDownBtn = document.getElementById('fontSizeDown');
+const fontSizeUpBtn = document.getElementById('fontSizeUp');
+let currentFontSize = <?php echo $baseFontSize; ?>;
+if (fontSizeValue) {
+  fontSizeValue.textContent = `${currentFontSize}px`;
+}
+
+function applyFontSize(size) {
+  const clamped = Math.max(10, Math.min(32, size));
+  if (paragraphText) paragraphText.style.fontSize = `${clamped}px`;
+  if (typingArea) typingArea.style.fontSize = `${clamped}px`;
+  currentFontSize = clamped;
+  if (fontSizeValue) {
+    fontSizeValue.textContent = `${clamped}px`;
+  }
+}
+
+applyFontSize(currentFontSize);
+
+if (typingArea && !typingOptions.allowBackspace) {
+  typingArea.addEventListener('keydown', (event) => {
+    if (event.key === 'Backspace' && !event.ctrlKey && !event.metaKey) {
+      event.preventDefault();
+    }
+  });
+}
+
+if (fontSizeDownBtn) {
+  fontSizeDownBtn.addEventListener('click', () => applyFontSize(currentFontSize - 1));
+}
+
+if (fontSizeUpBtn) {
+  fontSizeUpBtn.addEventListener('click', () => applyFontSize(currentFontSize + 1));
+}
+
+if (paragraphText) {
+  paragraphText.addEventListener('copy', (event) => event.preventDefault());
+  paragraphText.addEventListener('cut', (event) => event.preventDefault());
+  paragraphText.addEventListener('contextmenu', (event) => event.preventDefault());
+  paragraphText.addEventListener('selectstart', (event) => event.preventDefault());
+}
 
 function showKeyboardPreview(show) {
   if (!keyboardPreview) {
@@ -553,9 +610,9 @@ function setLayout(type) {
     para.className = 'col-md-6 h-100';
     typing.className = 'col-md-6 h-100';
   } else if (type === 'tb') {
-    container.className = 'row flex-column h-100';
+    container.className = 'row flex-column flex-md-row h-100';
     para.style.display = 'block';
-    para.className = 'col-12 mb-2';
+    para.className = 'col-12 mb-2 h-50';
     typing.className = 'col-12 h-50';
   } else if (type === 'single') {
     para.style.display = 'none';
@@ -566,7 +623,8 @@ function setLayout(type) {
 }
 </script>
 
-<script src="assets/js/remington-marathi.js"></script>
+<!-- <script src="assets/js/remington-marathi1.js"></script> -->
+<script src="assets/js/remington-marathi2.js"></script>
 <script>
 initRemingtonTyping('<?php echo htmlspecialchars($language, ENT_QUOTES); ?>');
 </script>

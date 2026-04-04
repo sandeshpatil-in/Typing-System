@@ -85,7 +85,8 @@ function getSafePost($key, $default = null) {
  * @return void
  */
 function logError($message, $type = 'ERROR') {
-    $timestamp = date('Y-m-d H:i:s');
+    // Use IST for consistent logging across the app
+    $timestamp = date('d-m-Y H:i:s');
     $logEntry = "[{$timestamp}] [{$type}] {$message}" . PHP_EOL;
     
     if (DEBUG_MODE || APP_ENV === 'production') {
@@ -265,8 +266,18 @@ function isCurrentPage($page) {
  * @param string $format Date format
  * @return string Formatted date
  */
-function formatDate($date, $format = 'Y-m-d H:i:s') {
-    return date($format, strtotime($date));
+function formatDate($date, $format = 'd-m-Y h:i A') {
+    if (empty($date)) {
+        return 'Not available';
+    }
+
+    $timestamp = strtotime((string) $date);
+
+    if ($timestamp === false) {
+        return $date;
+    }
+
+    return date($format, $timestamp);
 }
 
 /**

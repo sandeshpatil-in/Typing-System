@@ -69,7 +69,7 @@ if (function_exists('dbTableExists') && dbTableExists($conn, 'test_attempts')) {
                 <td class="text-capitalize"><?php echo htmlspecialchars($row['exam_type']); ?></td>
                 <td><?php echo htmlspecialchars((string) $row['wpm']); ?></td>
                 <td><?php echo htmlspecialchars((string) $row['accuracy']); ?>%</td>
-                <td><?php echo htmlspecialchars($row['created_at']); ?></td>
+                <td><?php echo htmlspecialchars(formatDate($row['created_at'])); ?></td>
             </tr>
         <?php } ?>
     </table>

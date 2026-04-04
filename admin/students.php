@@ -104,6 +104,7 @@ $result = $conn->query($studentQuery);
                         : ($paymentLabel === 'Razorpay'
                             ? PLAN_NAME
                             : ($paymentLabel === 'Hand Cash' ? 'Hand Cash Activation' : 'Waiting for payment'));
+                    $expiryDisplay = !empty($row['expiry_date']) ? formatDate($row['expiry_date']) : 'Not active';
                     ?>
                     <tr>
                         <td><?php echo htmlspecialchars((string) $row['id']); ?></td>
@@ -131,13 +132,13 @@ $result = $conn->query($studentQuery);
                             <?php if ($isActive) { ?>
                                 <span class="badge text-bg-success">Active</span>
                                 <div class="small text-muted mt-1">
-                                    Access until <?php echo htmlspecialchars((string) $row['expiry_date']); ?>
+                                    Access until <?php echo htmlspecialchars($expiryDisplay); ?>
                                 </div>
                             <?php } else { ?>
                                 <span class="badge text-bg-danger">Inactive</span>
                                 <div class="small text-muted mt-1">
                                     <?php if (!empty($row['expiry_date'])) { ?>
-                                        Expired on <?php echo htmlspecialchars((string) $row['expiry_date']); ?>
+                                        Expired on <?php echo htmlspecialchars($expiryDisplay); ?>
                                     <?php } else { ?>
                                         No paid plan yet
                                     <?php } ?>

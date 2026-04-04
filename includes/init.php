@@ -19,6 +19,7 @@ require_once __DIR__ . '/../config/constants.php';
 
 // Load database
 require_once __DIR__ . '/../config/database.php';
+/** @var mysqli $conn */
 
 // Load helpers
 require_once __DIR__ . '/helpers.php';
