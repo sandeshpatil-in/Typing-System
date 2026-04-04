@@ -623,8 +623,8 @@ function setLayout(type) {
 }
 </script>
 
-<!-- <script src="assets/js/remington-marathi1.js"></script> -->
-<script src="assets/js/remington-marathi2.js"></script>
+<script src="assets/js/remington-keyboard.js"></script>
+
 <script>
 initRemingtonTyping('<?php echo htmlspecialchars($language, ENT_QUOTES); ?>');
 </script>
