@@ -9,7 +9,6 @@ $page = getSafeGet('page', 'home');
 $studentCount = 0;
 $activeStudentCount = 0;
 $paragraphCount = 0;
-$resultCount = 0;
 
 $studentCountQuery = "SELECT COUNT(*) AS total, 0 AS active_total FROM students";
 
@@ -50,15 +49,6 @@ if (function_exists('dbTableExists') && dbTableExists($conn, 'passages')) {
     }
 }
 
-if (function_exists('dbTableExists') && dbTableExists($conn, 'test_attempts')) {
-    if ($countResult = $conn->query("SELECT COUNT(*) AS total FROM test_attempts")) {
-        $resultCount = (int) (($countResult->fetch_assoc())['total'] ?? 0);
-    }
-} elseif (function_exists('dbTableExists') && dbTableExists($conn, 'results')) {
-    if ($countResult = $conn->query("SELECT COUNT(*) AS total FROM results")) {
-        $resultCount = (int) (($countResult->fetch_assoc())['total'] ?? 0);
-    }
-}
 ?>
 
 <?php include("../includes/header.php"); ?>
@@ -75,7 +65,6 @@ if (function_exists('dbTableExists') && dbTableExists($conn, 'test_attempts')) {
                 <a href="dashboard.php?page=home" class="btn <?php echo $page === 'home' ? 'btn-light text-dark' : 'btn-outline-light'; ?> text-start">Dashboard</a>
                 <a href="dashboard.php?page=students" class="btn <?php echo $page === 'students' ? 'btn-light text-dark' : 'btn-outline-light'; ?> text-start">Students</a>
                 <a href="dashboard.php?page=paragraphs" class="btn <?php echo in_array($page, ['paragraphs', 'add-paragraph', 'edit-paragraph', 'delete-paragraph'], true) ? 'btn-light text-dark' : 'btn-outline-light'; ?> text-start">Paragraphs</a>
-                <a href="dashboard.php?page=results" class="btn <?php echo $page === 'results' ? 'btn-light text-dark' : 'btn-outline-light'; ?> text-start">Results</a>
                 <a href="logout.php" class="btn btn-outline-danger text-start mt-3">Logout</a>
             </div>
         </div>
@@ -85,7 +74,7 @@ if (function_exists('dbTableExists') && dbTableExists($conn, 'test_attempts')) {
                 <?php if ($page === 'home') { ?>
                     <div class="mb-4">
                         <h2 class="fw-bold mb-1">Welcome to Admin Dashboard</h2>
-                        <p class="text-muted mb-0">Activate hand cash students, manage exam-wise passages, and review typing activity from one place.</p>
+                        <p class="text-muted mb-0">Activate hand cash students and manage exam-wise passages from one place.</p>
                     </div>
 
                     <div class="row g-3">
@@ -110,14 +99,6 @@ if (function_exists('dbTableExists') && dbTableExists($conn, 'test_attempts')) {
                                 <div class="card-body">
                                     <small class="text-uppercase text-muted">Paragraphs</small>
                                     <h3 class="fw-bold mb-0"><?php echo $paragraphCount; ?></h3>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-xl-3 col-md-6">
-                            <div class="card border-0 shadow-sm h-100">
-                                <div class="card-body">
-                                    <small class="text-uppercase text-muted">Attempts</small>
-                                    <h3 class="fw-bold mb-0"><?php echo $resultCount; ?></h3>
                                 </div>
                             </div>
                         </div>
@@ -147,10 +128,6 @@ if (function_exists('dbTableExists') && dbTableExists($conn, 'test_attempts')) {
 
                         case 'delete-paragraph':
                             include("delete-paragraph.php");
-                            break;
-
-                        case 'results':
-                            include("results.php");
                             break;
 
                         default:

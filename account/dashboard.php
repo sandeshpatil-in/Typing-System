@@ -25,7 +25,7 @@ $planStartDisplay = !empty($planStart) && $planStart !== 'Not started' ? formatD
 $planExpiryDisplay = !empty($planExpiry) && $planExpiry !== 'Not active' ? formatDate($planExpiry) : 'Not active';
 $studentExpiryDisplay = !empty($student['expiry_date']) ? formatDate($student['expiry_date']) : 'Not active';
 
-$attempts = getStudentAttemptsResult($conn, (int) $student['id'], 20);
+$attempts = getStudentAttemptsResult($conn, (int) $student['id'], 10);
 ?>
 
 <?php include("../includes/header.php"); ?>
@@ -72,27 +72,11 @@ $attempts = getStudentAttemptsResult($conn, (int) $student['id'], 20);
                 </div>
             <?php } ?>
 
-            <div class="card border-dark shadow-sm mb-4">
-                <div class="card-body">
-                    <h4 class="mb-3">Plan Summary</h4>
-                    <?php if ($plan) { ?>
-                        <div class="row">
-                            <div class="col-md-3"><strong>Plan</strong><div><?php echo htmlspecialchars($planName); ?></div></div>
-                            <div class="col-md-3"><strong>Payment</strong><div><?php echo htmlspecialchars($paymentLabel); ?></div></div>
-                            <div class="col-md-3"><strong>Started</strong><div><?php echo htmlspecialchars($planStartDisplay); ?></div></div>
-                            <div class="col-md-3"><strong>Expires</strong><div><?php echo htmlspecialchars($planExpiryDisplay); ?></div></div>
-                        </div>
-                    <?php } else { ?>
-                        <p class="mb-0 text-muted">No paid plan found yet. Complete Razorpay payment or ask admin to confirm your hand cash payment to unlock unlimited tests.</p>
-                    <?php } ?>
-                </div>
-            </div>
-
             <div class="card border-dark shadow-sm">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h4 class="mb-0">Recent Attempts</h4>
-                        <span class="badge text-bg-light">Last 20 attempts</span>
+                        <span class="badge text-bg-light">Last 10 attempts</span>
                     </div>
 
                     <div class="table-responsive">
@@ -100,7 +84,6 @@ $attempts = getStudentAttemptsResult($conn, (int) $student['id'], 20);
                             <thead class="table-light">
                                 <tr>
                                     <th>Date</th>
-                                    <th>Access</th>
                                     <th>Language</th>
                                     <th>Exam</th>
                                     <th>WPM</th>
@@ -110,22 +93,17 @@ $attempts = getStudentAttemptsResult($conn, (int) $student['id'], 20);
                             </thead>
                             <tbody>
                                 <?php if (!$attempts || $attempts->num_rows === 0) { ?>
-                                    <tr><td colspan="7" class="text-center text-muted">No attempts recorded yet.</td></tr>
+                                    <tr><td colspan="6" class="text-center text-muted">No attempts recorded yet.</td></tr>
                                 <?php } ?>
 
                                 <?php while ($attempts && ($row = $attempts->fetch_assoc())) { ?>
                                     <tr>
                                         <td><?php echo htmlspecialchars(formatDate($row['created_at'])); ?></td>
-                                        <td>
-                                            <span class="badge <?php echo ($row['access_type'] ?? 'paid') === 'guest' ? 'text-bg-warning text-dark' : 'text-bg-success'; ?>">
-                                                <?php echo htmlspecialchars(ucfirst((string) ($row['access_type'] ?? 'paid'))); ?>
-                                            </span>
-                                        </td>
                                         <td class="text-capitalize"><?php echo htmlspecialchars($row['language']); ?></td>
                                         <td class="text-capitalize"><?php echo htmlspecialchars($row['exam_type']); ?></td>
-                                        <td><?php echo htmlspecialchars((string) $row['wpm']); ?></td>
-                                        <td><?php echo htmlspecialchars((string) $row['accuracy']); ?>%</td>
-                                        <td><?php echo htmlspecialchars((string) $row['typed_words']); ?></td>
+                                        <td><?php echo number_format((float) $row['wpm'], 0); ?></td>
+                                        <td><?php echo number_format((float) $row['accuracy'], 2); ?>%</td>
+                                        <td><?php echo (int) $row['typed_words']; ?></td>
                                     </tr>
                                 <?php } ?>
                             </tbody>
