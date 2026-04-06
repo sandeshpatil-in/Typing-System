@@ -14,10 +14,13 @@ $validator = new UserValidator($conn);
 $error = '';
 $message = getFlash('auth_message');
 $oldEmail = '';
+$loginScope = 'student_login';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
         $error = 'Your session expired. Please try again.';
+    } elseif (isLoginRateLimited($loginScope, $secondsRemaining)) {
+        $error = getLoginRateLimitMessage($secondsRemaining);
     } else {
         $oldEmail = getSafePost('email', '');
         $password = $_POST['password'] ?? '';
@@ -25,6 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user = $validator->validateLogin($oldEmail, $password, 'student');
 
         if ($user && $validator->validateStudentStatus($user)) {
+            clearLoginRateLimit($loginScope);
             loginStudent($user['id']);
             linkGuestAttemptsToStudent($conn, (int) $user['id']);
             $user = syncStudentPlanStatus($conn, $user['id']);
@@ -38,7 +42,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect('payment.php');
         }
 
-        $error = $validator->getErrorMessage() ?: 'Unable to sign in.';
+        recordLoginFailure($loginScope);
+        if (isLoginRateLimited($loginScope, $secondsRemaining)) {
+            $error = getLoginRateLimitMessage($secondsRemaining);
+        } else {
+            $error = $validator->getErrorMessage() ?: 'Unable to sign in.';
+        }
     }
 }
 ?>

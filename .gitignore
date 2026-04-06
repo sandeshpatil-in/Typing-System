@@ -1,6 +1,9 @@
 .vscode/
 logs/*.log
+logs/login-attempts/
+logs/maintenance/
 .env
 .env.*
+!.env.example
 vendor/
 node_modules/

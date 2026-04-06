@@ -6,10 +6,13 @@ if (isAdminLoggedIn()) {
 }
 
 $error = '';
+$loginScope = 'admin_login';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
         $error = 'Your session expired. Please try again.';
+    } elseif (isLoginRateLimited($loginScope, $secondsRemaining)) {
+        $error = getLoginRateLimitMessage($secondsRemaining);
     } else {
         $username = getSafePost('username', '');
         $password = $_POST['password'] ?? '';
@@ -23,13 +26,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->close();
 
             if ($admin && password_verify($password, $admin['password'])) {
+                clearLoginRateLimit($loginScope);
                 session_regenerate_id(true);
                 $_SESSION[ADMIN_SESSION_KEY] = (int) $admin['id'];
                 redirect('admin/dashboard.php');
             }
         }
 
-        $error = 'Invalid admin credentials.';
+        recordLoginFailure($loginScope);
+        if (isLoginRateLimited($loginScope, $secondsRemaining)) {
+            $error = getLoginRateLimitMessage($secondsRemaining);
+        } else {
+            $error = 'Invalid admin credentials.';
+        }
     }
 }
 ?>

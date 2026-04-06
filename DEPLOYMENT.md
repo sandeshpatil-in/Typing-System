@@ -3,8 +3,9 @@
 ## Before Upload
 
 1. Export your latest project files.
-2. Make sure `.env` is not uploaded from local unless it contains your real production values.
-3. Keep Razorpay live keys only in production `.env`.
+2. Copy `.env.example` to `.env` and fill only production values.
+3. Do not upload your local `.env` if it still contains localhost credentials or test values.
+4. Keep Razorpay live keys only in the production `.env`.
 
 ## Upload To hPanel
 
@@ -17,13 +18,39 @@
 
 Set the site to `PHP 8.2` or newer in hPanel before testing the app.
 
+## Required PHP Extensions
+
+Make sure these extensions are enabled in Hostinger:
+
+- `mysqli`
+- `curl`
+- `mbstring`
+- `fileinfo`
+- `openssl`
+- `json`
+
 ## Database Setup
 
 1. Create a MySQL database in hPanel.
 2. Update the production `.env` with the new DB credentials.
 3. Import these SQL files into the database:
    - `config/auth_freemium_schema.sql`
+   - `config/admin_schema.sql`
    - `config/typing_preference_schema.sql`
+4. Create your first admin user with a securely hashed password.
+
+Generate a password hash locally:
+
+```powershell
+C:\xampp\php\php.exe -r "echo password_hash('ChangeMeNow123', PASSWORD_DEFAULT), PHP_EOL;"
+```
+
+Then insert the admin in phpMyAdmin or Hostinger MySQL:
+
+```sql
+INSERT INTO admins (username, password)
+VALUES ('admin', 'PASTE_GENERATED_HASH_HERE');
+```
 
 ## Environment File
 
@@ -63,9 +90,10 @@ If one of those columns already exists, remove that line and run the remaining s
 1. Confirm `APP_ENV=production`.
 2. Confirm `BASE_URL` matches the final domain exactly.
 3. Confirm Razorpay keys are the correct live keys.
-4. Confirm `storage/logs` is not required; this project logs to `logs/error.log`.
+4. Confirm `logs/error.log` is writable by PHP on the server.
 5. Confirm Apache `.htaccess` is uploaded.
 6. Confirm HTTPS is enabled for the domain in Hostinger.
+7. If you deploy into a subfolder instead of `public_html` root, review `.htaccess` error document paths.
 
 ## Retest After Deploy
 
@@ -75,4 +103,4 @@ If one of those columns already exists, remove that line and run the remaining s
 4. Confirm the last guest test sends the user to account creation/payment flow.
 5. Log in as student and verify dashboard data.
 6. Create a Razorpay order and complete a payment in the correct environment.
-7. Check admin student list, results list, and manual 30-day activation.
+7. Check admin student list, paragraph management, and manual 30-day activation.

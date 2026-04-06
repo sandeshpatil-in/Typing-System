@@ -451,6 +451,86 @@ function guestHasTestsRemaining($conn = null) {
     return getGuestTestsRemaining($conn) > 0;
 }
 
+function getTypingResultCleanupStateFile() {
+    $directory = ROOT_PATH . '/logs/maintenance';
+
+    if (!is_dir($directory)) {
+        @mkdir($directory, 0755, true);
+    }
+
+    return $directory . '/typing-result-retention.json';
+}
+
+function shouldRunTypingResultCleanup($force = false) {
+    if ($force || ATTEMPT_RETENTION_DAYS <= 0) {
+        return true;
+    }
+
+    $stateFile = getTypingResultCleanupStateFile();
+
+    if (!is_file($stateFile)) {
+        return true;
+    }
+
+    $state = json_decode((string) @file_get_contents($stateFile), true);
+    $lastRun = is_array($state) ? (int) ($state['last_run'] ?? 0) : 0;
+
+    return $lastRun <= 0 || (time() - $lastRun) >= ATTEMPT_RETENTION_CLEANUP_INTERVAL;
+}
+
+function markTypingResultCleanupRun($deletedCounts) {
+    $stateFile = getTypingResultCleanupStateFile();
+    @file_put_contents($stateFile, json_encode([
+        'last_run' => time(),
+        'deleted' => $deletedCounts
+    ], JSON_UNESCAPED_SLASHES), LOCK_EX);
+}
+
+function pruneExpiredTypingResults($conn, $force = false) {
+    if (!$conn || ATTEMPT_RETENTION_DAYS <= 0 || !shouldRunTypingResultCleanup($force)) {
+        return;
+    }
+
+    $cutoff = date('Y-m-d H:i:s', strtotime('-' . ATTEMPT_RETENTION_DAYS . ' days'));
+    $deletedCounts = [
+        'test_attempts' => 0,
+        'results' => 0
+    ];
+
+    if (dbTableExists($conn, 'test_attempts') && dbColumnExists($conn, 'test_attempts', 'created_at')) {
+        $stmt = $conn->prepare("DELETE FROM test_attempts WHERE created_at < ?");
+
+        if ($stmt) {
+            $stmt->bind_param('s', $cutoff);
+            $stmt->execute();
+            $deletedCounts['test_attempts'] = max(0, (int) $stmt->affected_rows);
+            $stmt->close();
+        }
+    }
+
+    if (dbTableExists($conn, 'results') && dbColumnExists($conn, 'results', 'created_at')) {
+        $stmt = $conn->prepare("DELETE FROM results WHERE created_at < ?");
+
+        if ($stmt) {
+            $stmt->bind_param('s', $cutoff);
+            $stmt->execute();
+            $deletedCounts['results'] = max(0, (int) $stmt->affected_rows);
+            $stmt->close();
+        }
+    }
+
+    markTypingResultCleanupRun($deletedCounts);
+
+    if (($deletedCounts['test_attempts'] + $deletedCounts['results']) > 0) {
+        logError(
+            'Deleted expired typing records older than ' . ATTEMPT_RETENTION_DAYS . ' days. '
+            . 'test_attempts=' . $deletedCounts['test_attempts']
+            . ', results=' . $deletedCounts['results'],
+            'MAINTENANCE'
+        );
+    }
+}
+
 function linkGuestAttemptsToStudent($conn, $studentId) {
     if (
         !$conn
@@ -663,6 +743,14 @@ function recordTestAttempt($conn, $data) {
 }
 
 function createRazorpayOrder($receipt, $amountPaise) {
+    if (!function_exists('curl_init')) {
+        logError('cURL extension is not available for Razorpay order creation.', 'PAYMENT');
+
+        return [
+            'error_message' => 'Payment gateway is not available on this server.'
+        ];
+    }
+
     $payload = json_encode([
         'amount' => $amountPaise,
         'currency' => PAYMENT_CURRENCY,
@@ -675,9 +763,14 @@ function createRazorpayOrder($receipt, $amountPaise) {
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST => true,
         CURLOPT_POSTFIELDS => $payload,
+        CURLOPT_CONNECTTIMEOUT => 10,
         CURLOPT_HTTPHEADER => [
             'Content-Type: application/json'
         ],
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYHOST => 2,
+        CURLOPT_TIMEOUT => 30,
+        CURLOPT_USERAGENT => APP_NAME . '/' . APP_VERSION,
         CURLOPT_USERPWD => RAZORPAY_KEY_ID . ':' . RAZORPAY_KEY_SECRET
     ]);
 

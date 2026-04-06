@@ -3,18 +3,17 @@ if (!isAdminLoggedIn()) {
     redirect('admin/login.php');
 }
 
-$id = 0;
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
-        setFlash('admin_student_message', 'Activation failed because the session expired. Please try again.');
-        redirect('admin/dashboard.php?page=students');
-    }
-
-    $id = (int) getSafePost('id', 0);
-} else {
-    $id = (int) getSafeGet('id', 0);
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    setFlash('admin_student_message', 'Activation must be submitted from the students page.');
+    redirect('admin/dashboard.php?page=students');
 }
+
+if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
+    setFlash('admin_student_message', 'Activation failed because the session expired. Please try again.');
+    redirect('admin/dashboard.php?page=students');
+}
+
+$id = (int) getSafePost('id', 0);
 
 if ($id <= 0) {
     setFlash('admin_student_message', 'Invalid student selected.');

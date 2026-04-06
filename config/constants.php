@@ -134,6 +134,8 @@ define('LOGIN_ATTEMPT_TIMEOUT', 900); // 15 minutes
 define('PASSWORD_MIN_LENGTH', 6);
 define('GUEST_TEST_LIMIT', 5);
 define('PLAN_DURATION_DAYS', 30);
+define('ATTEMPT_RETENTION_DAYS', 5);
+define('ATTEMPT_RETENTION_CLEANUP_INTERVAL', 3600); // 1 hour
 
 // ==========================================
 // PAGINATION & LIMITS

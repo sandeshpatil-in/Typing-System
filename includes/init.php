@@ -17,22 +17,24 @@ define('APP_INITIALIZED', true);
 // Load constants
 require_once __DIR__ . '/../config/constants.php';
 
+// Load helpers
+require_once __DIR__ . '/helpers.php';
+
+// Start the session only after secure cookie settings are available.
+initSession();
+
 // Load database
 require_once __DIR__ . '/../config/database.php';
 /** @var mysqli $conn */
 
-// Load helpers
-require_once __DIR__ . '/helpers.php';
-
 // Load access and plan helpers
 require_once __DIR__ . '/access.php';
 
+if (function_exists('pruneExpiredTypingResults')) {
+    pruneExpiredTypingResults($conn);
+}
+
 // Load theme config
 require_once __DIR__ . '/../config/ThemeConfig.php';
-
-// Initialize session
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
 
 ?>
