@@ -6,6 +6,12 @@ if (!isAdminLoggedIn()) {
 }
 
 $page = getSafeGet('page', 'home');
+
+// Handle destructive actions before any output to keep header() redirects clean.
+if ($page === 'delete-paragraph') {
+    include __DIR__ . '/delete-paragraph.php';
+    exit;
+}
 $studentCount = 0;
 $activeStudentCount = 0;
 $paragraphCount = 0;

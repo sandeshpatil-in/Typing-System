@@ -4,7 +4,7 @@ require_once __DIR__ . '/../includes/UserValidator.php';
 
 $error = '';
 $token = trim((string) ($_POST['token'] ?? getSafeGet('token', '')));
-$captchaScope = 'student_reset_password_captcha';
+$captchaScope = null;
 $record = $token !== '' ? getStudentPasswordResetRecord($conn, $token) : null;
 $isValidToken = isStudentPasswordResetRecordActive($record);
 
@@ -16,11 +16,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Your session expired. Please try again.';
     } elseif (!$isValidToken) {
         $error = 'This reset link is invalid or expired.';
-    } elseif (!verifyHumanVerification($captchaScope, $_POST['captcha_answer'] ?? '', $_POST['g-recaptcha-response'] ?? '')) {
-        $error = isRecaptchaEnabled()
-            ? 'Please complete the reCAPTCHA verification.'
-            : 'Please solve the captcha correctly.';
-        refreshHumanVerification($captchaScope);
     } elseif (strlen($password) < PASSWORD_MIN_LENGTH) {
         $error = 'Password must be at least ' . PASSWORD_MIN_LENGTH . ' characters.';
     } elseif (!UserValidator::isPasswordStrong($password)) {
@@ -30,14 +25,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif (!resetStudentPasswordWithToken($conn, $token, $password)) {
         $error = 'This reset link is invalid or expired.';
     } else {
-        clearHumanVerification($captchaScope);
         clearLoginRateLimit('student_login');
         setFlash('auth_message', 'Password reset successful. Please log in with your new password.');
         redirect('account/login.php');
     }
 }
 
-$captcha = getCaptchaChallenge($captchaScope);
 ?>
 
 <?php include("../includes/header.php"); ?>
@@ -86,25 +79,6 @@ $captcha = getCaptchaChallenge($captchaScope);
                                 >
                             </div>
 
-                            <div class="mb-3">
-                                <label class="form-label"><?php echo isRecaptchaEnabled() ? 'Verification' : 'Captcha'; ?></label>
-                                <?php if (isRecaptchaEnabled()) { ?>
-                                    <div class="g-recaptcha" data-sitekey="<?php echo htmlspecialchars(getRecaptchaSiteKey()); ?>"></div>
-                                <?php } else { ?>
-                                    <div class="input-group">
-                                        <span class="input-group-text"><?php echo htmlspecialchars($captcha['question']); ?></span>
-                                        <input
-                                            type="text"
-                                            name="captcha_answer"
-                                            class="form-control"
-                                            placeholder="Enter answer"
-                                            required
-                                            inputmode="numeric"
-                                        >
-                                    </div>
-                                <?php } ?>
-                            </div>
-
                             <button type="submit" class="btn btn-dark w-100 py-2">Update Password</button>
                         </form>
 
@@ -115,9 +89,5 @@ $captcha = getCaptchaChallenge($captchaScope);
         </div>
     </div>
 </div>
-
-<?php if (isRecaptchaEnabled()) { ?>
-<script src="https://www.google.com/recaptcha/api.js" async defer></script>
-<?php } ?>
 
 <?php include("../includes/footer.php"); ?>

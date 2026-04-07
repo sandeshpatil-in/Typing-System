@@ -149,13 +149,19 @@ define('TYPING_TEST_MAX_TIME', 600); // 10 minutes max
 // PAYMENT CONFIGURATION
 // ==========================================
 define('PLAN_NAME', 'Pro Monthly');
-define('PLAN_PRICE', 199.00);
+define('PLAN_PRICE', 1.00);
 define('PLAN_PRICE_PAISE', (int) round(PLAN_PRICE * 100));
 define('PAYMENT_CURRENCY', 'INR');
 define('RAZORPAY_KEY_ID', getenv('RAZORPAY_KEY_ID') ?: '');
 define('RAZORPAY_KEY_SECRET', getenv('RAZORPAY_KEY_SECRET') ?: '');
 define('MAIL_FROM_ADDRESS', getenv('MAIL_FROM_ADDRESS') ?: 'no-reply@example.com');
 define('MAIL_FROM_NAME', getenv('MAIL_FROM_NAME') ?: APP_NAME);
+define('MAIL_ENVELOPE_FROM', getenv('MAIL_ENVELOPE_FROM') ?: MAIL_FROM_ADDRESS);
+define('SMTP_HOST', getenv('SMTP_HOST') ?: '');
+define('SMTP_PORT', (int) (getenv('SMTP_PORT') ?: 587));
+define('SMTP_USER', getenv('SMTP_USER') ?: '');
+define('SMTP_PASS', getenv('SMTP_PASS') ?: '');
+define('SMTP_SECURE', strtolower(trim((string) getenv('SMTP_SECURE'))) ?: 'tls'); // tls | ssl | none
 define('RECAPTCHA_SITE_KEY', getenv('RECAPTCHA_SITE_KEY') ?: '');
 define('RECAPTCHA_SECRET_KEY', getenv('RECAPTCHA_SECRET_KEY') ?: '');
 

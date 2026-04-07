@@ -12,18 +12,13 @@ if ($currentStudent && !hasActivePlan($currentStudent)) {
 $error = '';
 $message = '';
 $email = '';
-$captchaScope = 'student_forgot_password_captcha';
+$captchaScope = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = getSafePost('email', '');
 
     if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
         $error = 'Your session expired. Please try again.';
-    } elseif (!verifyHumanVerification($captchaScope, $_POST['captcha_answer'] ?? '', $_POST['g-recaptcha-response'] ?? '')) {
-        $error = isRecaptchaEnabled()
-            ? 'Please complete the reCAPTCHA verification.'
-            : 'Please solve the captcha correctly.';
-        refreshHumanVerification($captchaScope);
     } elseif (!isValidEmail($email)) {
         $error = 'Please enter a valid email address.';
     } else {
@@ -39,11 +34,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $message = 'If this email is registered, a password reset link has been sent. If you do not receive it, please contact admin.';
         $email = '';
-        refreshHumanVerification($captchaScope);
     }
 }
-
-$captcha = getCaptchaChallenge($captchaScope);
 ?>
 
 <?php include("../includes/header.php"); ?>
@@ -75,25 +67,6 @@ $captcha = getCaptchaChallenge($captchaScope);
                             >
                         </div>
 
-                        <div class="mb-3">
-                            <label class="form-label"><?php echo isRecaptchaEnabled() ? 'Verification' : 'Captcha'; ?></label>
-                            <?php if (isRecaptchaEnabled()) { ?>
-                                <div class="g-recaptcha" data-sitekey="<?php echo htmlspecialchars(getRecaptchaSiteKey()); ?>"></div>
-                            <?php } else { ?>
-                                <div class="input-group">
-                                    <span class="input-group-text"><?php echo htmlspecialchars($captcha['question']); ?></span>
-                                    <input
-                                        type="text"
-                                        name="captcha_answer"
-                                        class="form-control"
-                                        placeholder="Enter answer"
-                                        required
-                                        inputmode="numeric"
-                                    >
-                                </div>
-                            <?php } ?>
-                        </div>
-
                         <button type="submit" class="btn btn-dark w-100 py-2">Send Reset Link</button>
                     </form>
 
@@ -105,9 +78,5 @@ $captcha = getCaptchaChallenge($captchaScope);
         </div>
     </div>
 </div>
-
-<?php if (isRecaptchaEnabled()) { ?>
-<script src="https://www.google.com/recaptcha/api.js" async defer></script>
-<?php } ?>
 
 <?php include("../includes/footer.php"); ?>

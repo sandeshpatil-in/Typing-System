@@ -156,23 +156,16 @@ function verifyRecaptchaToken($token) {
 }
 
 function verifyHumanVerification($scope, $captchaAnswer = null, $recaptchaToken = null) {
-    if (isRecaptchaEnabled()) {
-        return verifyRecaptchaToken($recaptchaToken);
-    }
-
-    return verifyCaptchaAnswer($scope, $captchaAnswer);
+    // Captcha disabled sitewide per current configuration.
+    return true;
 }
 
 function refreshHumanVerification($scope) {
-    if (!isRecaptchaEnabled()) {
-        refreshCaptchaChallenge($scope);
-    }
+    return true;
 }
 
 function clearHumanVerification($scope) {
-    if (!isRecaptchaEnabled()) {
-        clearCaptchaChallenge($scope);
-    }
+    return true;
 }
 
 function sanitizeMailHeaderValue($value) {
@@ -185,7 +178,7 @@ function sendAppEmail($toEmail, $subject, $message) {
     $fromName = sanitizeMailHeaderValue(MAIL_FROM_NAME);
     $subject = sanitizeMailHeaderValue($subject);
 
-    if (!isValidEmail($toEmail) || !isValidEmail($fromAddress) || !function_exists('mail')) {
+    if (!isValidEmail($toEmail) || !isValidEmail($fromAddress)) {
         return false;
     }
 
@@ -201,7 +194,108 @@ function sendAppEmail($toEmail, $subject, $message) {
     $normalizedMessage = str_replace(["\r\n", "\r"], "\n", (string) $message);
     $normalizedMessage = str_replace("\n", "\r\n", $normalizedMessage);
 
-    return @mail($toEmail, $encodedSubject, $normalizedMessage, implode("\r\n", $headers));
+    // Prefer SMTP if configured; otherwise fall back to mail()
+    if (SMTP_HOST !== '' && SMTP_USER !== '' && SMTP_PASS !== '') {
+        return sendAppEmailSmtp(
+            $toEmail,
+            $encodedSubject,
+            $normalizedMessage,
+            $fromAddress,
+            $fromName,
+            implode("\r\n", $headers)
+        );
+    }
+
+    if (function_exists('ini_set')) {
+        @ini_set('sendmail_from', MAIL_ENVELOPE_FROM);
+    }
+
+    $params = '';
+    if (stripos(PHP_OS, 'WIN') === false && MAIL_ENVELOPE_FROM !== '') {
+        $params = '-f' . escapeshellarg(MAIL_ENVELOPE_FROM);
+    }
+
+    return @mail($toEmail, $encodedSubject, $normalizedMessage, implode("\r\n", $headers), $params);
+}
+
+function sendAppEmailSmtp($toEmail, $subject, $message, $fromAddress, $fromName, $headerString) {
+    $secure = SMTP_SECURE;
+    $host = SMTP_HOST;
+    $port = SMTP_PORT > 0 ? SMTP_PORT : 587;
+
+    $transport = ($secure === 'ssl') ? 'ssl://' : 'tcp://';
+    $socket = @stream_socket_client(
+        $transport . $host . ':' . $port,
+        $errno,
+        $errstr,
+        15,
+        STREAM_CLIENT_CONNECT,
+        stream_context_create([
+            'ssl' => ['verify_peer' => true, 'verify_peer_name' => true, 'allow_self_signed' => false]
+        ])
+    );
+
+    if (!$socket) {
+        if (function_exists('logError')) {
+            logError("SMTP connect failed: {$errstr} ({$errno})", 'EMAIL');
+        }
+        return false;
+    }
+
+    $read = function () use ($socket) {
+        return fgets($socket, 515);
+    };
+    $write = function ($data) use ($socket) {
+        fwrite($socket, $data . "\r\n");
+    };
+
+    $expect = function ($code) use ($read) {
+        $line = $read();
+        return is_string($line) && str_starts_with($line, (string) $code);
+    };
+
+    $read(); // initial
+    $write('EHLO ' . ($_SERVER['HTTP_HOST'] ?? 'localhost'));
+    $bannerOk = $expect(250);
+
+    if ($secure === 'tls') {
+        $write('STARTTLS');
+        if (!$expect(220) || !stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
+            fclose($socket);
+            return false;
+        }
+        $write('EHLO ' . ($_SERVER['HTTP_HOST'] ?? 'localhost'));
+        $bannerOk = $expect(250);
+    }
+
+    if (!$bannerOk) {
+        fclose($socket);
+        return false;
+    }
+
+    $write('AUTH LOGIN');
+    if (!$expect(334)) { fclose($socket); return false; }
+    $write(base64_encode(SMTP_USER));
+    if (!$expect(334)) { fclose($socket); return false; }
+    $write(base64_encode(SMTP_PASS));
+    if (!$expect(235)) { fclose($socket); return false; }
+
+    $write('MAIL FROM: <' . MAIL_ENVELOPE_FROM . '>');
+    if (!$expect(250)) { fclose($socket); return false; }
+
+    $write('RCPT TO: <' . $toEmail . '>');
+    if (!$expect(250)) { fclose($socket); return false; }
+
+    $write('DATA');
+    if (!$expect(354)) { fclose($socket); return false; }
+
+    $write($headerString . "\r\n\r\n" . $message . "\r\n.");
+    $accepted = $expect(250);
+
+    $write('QUIT');
+    fclose($socket);
+
+    return $accepted;
 }
 
 function ensureStudentPasswordResetTable($conn) {
