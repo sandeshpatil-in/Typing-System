@@ -1,5 +1,9 @@
-<?php include 'includes/header.php'; ?>
-<link rel="stylesheet" href="assets/css/style.css">
+<?php
+require_once __DIR__ . '/includes/init.php';
+$pageTitle = 'Support | ' . APP_NAME;
+$metaDescription = 'Get support for Ahilya Typing accounts, plans, and typing practice questions.';
+include 'includes/header.php';
+?>
 
 <section class="my-5 min-vh-100">
   <div class="container">

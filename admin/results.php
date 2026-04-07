@@ -3,7 +3,7 @@ if (!isAdminLoggedIn()) {
     redirect('admin/login.php');
 }
 
-$result = false;
+$items = [];
 $hasAttemptAccessType = function_exists('dbColumnExists') && dbTableExists($conn, 'test_attempts') && dbColumnExists($conn, 'test_attempts', 'access_type');
 
 if (function_exists('dbTableExists') && dbTableExists($conn, 'test_attempts')) {
@@ -20,6 +20,10 @@ if (function_exists('dbTableExists') && dbTableExists($conn, 'test_attempts')) {
          LEFT JOIN students s ON ta.student_id = s.id
          ORDER BY ta.id DESC"
     );
+
+    while ($result && ($row = $result->fetch_assoc())) {
+        $items[] = $row;
+    }
 } elseif (function_exists('dbTableExists') && dbTableExists($conn, 'results')) {
     $result = $conn->query(
         "SELECT r.id,
@@ -34,43 +38,57 @@ if (function_exists('dbTableExists') && dbTableExists($conn, 'test_attempts')) {
          JOIN students s ON r.student_id = s.id
          ORDER BY r.id DESC"
     );
+
+    while ($result && ($row = $result->fetch_assoc())) {
+        $items[] = $row;
+    }
 }
 ?>
 
-<div class="container mt-5">
-    <h3 class="text-center pb-3">Results</h3>
+<div class="container-fluid px-0">
+    <div class="mb-4">
+        <h3 class="mb-1">Results</h3>
+        <p class="text-muted mb-0">Results table now follows the same admin design as students.</p>
+    </div>
 
-    <table class="table table-bordered border-1 border-dark">
-        <tr class="table-light border-1 border-dark">
-            <th>ID</th>
-            <th>Student</th>
-            <th>Access</th>
-            <th>Language</th>
-            <th>Exam</th>
-            <th>WPM</th>
-            <th>Accuracy</th>
-            <th>Date</th>
-        </tr>
+    <div class="table-responsive shadow-sm rounded-3">
+        <table class="table table-bordered table-hover align-middle bg-white mb-0" style="min-width: 950px;">
+            <thead class="table-dark">
+                <tr>
+                    <th class="text-nowrap">ID</th>
+                    <th class="text-nowrap">Student</th>
+                    <th class="text-nowrap">Access</th>
+                    <th class="text-nowrap">Language</th>
+                    <th class="text-nowrap">Exam</th>
+                    <th class="text-nowrap">WPM</th>
+                    <th class="text-nowrap">Accuracy</th>
+                    <th class="text-nowrap">Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php if (empty($items)) { ?>
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-4">No results found.</td>
+                    </tr>
+                <?php } ?>
 
-        <?php if (!$result || $result->num_rows === 0) { ?>
-            <tr><td colspan="8" class="text-center text-muted">No results found.</td></tr>
-        <?php } ?>
-
-        <?php while ($result && ($row = $result->fetch_assoc())) { ?>
-            <tr>
-                <td><?php echo htmlspecialchars((string) $row['id']); ?></td>
-                <td><?php echo htmlspecialchars($row['student_name']); ?></td>
-                <td>
-                    <span class="badge <?php echo ($row['access_type'] ?? 'guest') === 'guest' ? 'text-bg-warning text-dark' : 'text-bg-success'; ?>">
-                        <?php echo htmlspecialchars(ucfirst((string) ($row['access_type'] ?? 'guest'))); ?>
-                    </span>
-                </td>
-                <td class="text-capitalize"><?php echo htmlspecialchars($row['language']); ?></td>
-                <td class="text-capitalize"><?php echo htmlspecialchars($row['exam_type']); ?></td>
-                <td><?php echo htmlspecialchars((string) $row['wpm']); ?></td>
-                <td><?php echo htmlspecialchars((string) $row['accuracy']); ?>%</td>
-                <td><?php echo htmlspecialchars(formatDate($row['created_at'])); ?></td>
-            </tr>
-        <?php } ?>
-    </table>
+                <?php foreach ($items as $row) { ?>
+                    <tr>
+                        <td class="text-nowrap fw-semibold"><?php echo htmlspecialchars((string) $row['id']); ?></td>
+                        <td class="text-nowrap"><?php echo htmlspecialchars($row['student_name']); ?></td>
+                        <td class="text-nowrap">
+                            <span class="badge <?php echo ($row['access_type'] ?? 'guest') === 'guest' ? 'text-bg-warning text-dark' : 'text-bg-success'; ?>">
+                                <?php echo htmlspecialchars(ucfirst((string) ($row['access_type'] ?? 'guest'))); ?>
+                            </span>
+                        </td>
+                        <td class="text-nowrap text-capitalize"><?php echo htmlspecialchars($row['language']); ?></td>
+                        <td class="text-nowrap text-capitalize"><?php echo htmlspecialchars($row['exam_type']); ?></td>
+                        <td class="text-nowrap"><?php echo htmlspecialchars((string) $row['wpm']); ?></td>
+                        <td class="text-nowrap"><?php echo htmlspecialchars((string) $row['accuracy']); ?>%</td>
+                        <td class="text-nowrap"><?php echo htmlspecialchars(formatDate($row['created_at'], 'd-m-Y')); ?></td>
+                    </tr>
+                <?php } ?>
+            </tbody>
+        </table>
+    </div>
 </div>

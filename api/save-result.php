@@ -14,11 +14,12 @@ if (!isStudentLoggedIn()) {
 }
 
 $access = getAccessContext($conn);
+$attemptAccessType = $access['has_active_plan'] ? 'paid' : 'guest';
 
-if ($access['is_logged_in'] && !$access['has_active_plan']) {
+if ($access['is_logged_in'] && !$access['has_active_plan'] && $access['free_tests_remaining'] <= 0) {
     jsonResponse([
         'success' => false,
-        'message' => 'Your plan has expired. Please renew to continue.',
+        'message' => 'Your 5 free tests are finished. Activate your plan to continue.',
         'redirect' => BASE_URL . 'payment.php'
     ], 403);
 }
@@ -26,7 +27,7 @@ if ($access['is_logged_in'] && !$access['has_active_plan']) {
 if (!$access['is_logged_in'] && !$access['guest_tests_remaining']) {
     jsonResponse([
         'success' => false,
-        'message' => 'Your free guest tests are finished. Please sign up.',
+        'message' => 'Your 5 free tests are finished. Create an account and activate your plan to continue.',
         'redirect' => BASE_URL . 'account/register.php'
     ], 403);
 }
@@ -49,23 +50,25 @@ $attemptId = recordTestAttempt($conn, [
     'wpm' => $wpm,
     'accuracy' => $accuracy,
     'typed_words' => $typedWords,
-    'access_type' => $access['is_logged_in'] ? 'paid' : 'guest'
+    'access_type' => $attemptAccessType
 ]);
 
 if (!$attemptId) {
     jsonResponse(['success' => false, 'message' => 'Unable to save test attempt'], 500);
 }
 
-$remaining = $access['guest_tests_remaining'];
+$remaining = (int) ($access['guest_tests_remaining'] ?? 0);
 
 if (!$access['is_logged_in']) {
     incrementGuestAttemptsUsed($conn);
     $remaining = getGuestTestsRemaining($conn);
+} elseif (!$access['has_active_plan'] && !empty($access['student']['id'])) {
+    $remaining = getStudentFreeTestsRemaining($conn, (int) $access['student']['id']);
 }
 
 jsonResponse([
     'success' => true,
     'attempt_id' => $attemptId,
     'guest_tests_remaining' => $remaining,
-    'access_type' => $access['is_logged_in'] ? 'paid' : 'guest'
+    'access_type' => $attemptAccessType
 ]);

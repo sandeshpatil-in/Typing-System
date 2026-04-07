@@ -132,6 +132,8 @@ define('ADMIN_SESSION_KEY', 'admin_id');
 define('MAX_LOGIN_ATTEMPTS', 5);
 define('LOGIN_ATTEMPT_TIMEOUT', 900); // 15 minutes
 define('PASSWORD_MIN_LENGTH', 6);
+define('CAPTCHA_EXPIRY_SECONDS', 600);
+define('PASSWORD_RESET_EXPIRY_MINUTES', max(5, (int) (getenv('PASSWORD_RESET_EXPIRY_MINUTES') ?: 30)));
 define('GUEST_TEST_LIMIT', 5);
 define('PLAN_DURATION_DAYS', 30);
 define('ATTEMPT_RETENTION_DAYS', 5);
@@ -152,6 +154,10 @@ define('PLAN_PRICE_PAISE', (int) round(PLAN_PRICE * 100));
 define('PAYMENT_CURRENCY', 'INR');
 define('RAZORPAY_KEY_ID', getenv('RAZORPAY_KEY_ID') ?: '');
 define('RAZORPAY_KEY_SECRET', getenv('RAZORPAY_KEY_SECRET') ?: '');
+define('MAIL_FROM_ADDRESS', getenv('MAIL_FROM_ADDRESS') ?: 'no-reply@example.com');
+define('MAIL_FROM_NAME', getenv('MAIL_FROM_NAME') ?: APP_NAME);
+define('RECAPTCHA_SITE_KEY', getenv('RECAPTCHA_SITE_KEY') ?: '');
+define('RECAPTCHA_SECRET_KEY', getenv('RECAPTCHA_SECRET_KEY') ?: '');
 
 // ==========================================
 // ERROR HANDLING

@@ -1,5 +1,9 @@
-<?php include 'includes/header.php'; ?>
-<link rel="stylesheet" href="assets/css/style.css">
+<?php
+require_once __DIR__ . '/includes/init.php';
+$pageTitle = 'About | ' . APP_NAME;
+$metaDescription = 'Learn about Ahilya Typing and how we help students practice typing for exams with a clean dashboard and reports.';
+include 'includes/header.php';
+?>
 
   <section class="about my-5 min-vh-100">
     <div class="container">

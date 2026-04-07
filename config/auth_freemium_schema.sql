@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS students (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     email VARCHAR(190) NOT NULL UNIQUE,
+    contact_number VARCHAR(20) DEFAULT NULL,
     password VARCHAR(255) NOT NULL,
     status TINYINT(1) NOT NULL DEFAULT 0,
     plan_start_date DATE DEFAULT NULL,

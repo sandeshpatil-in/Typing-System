@@ -8,16 +8,17 @@ if (!isStudentLoggedIn()) {
 
 $access = getAccessContext($conn);
 $message = getFlash('auth_message');
+$remainingTests = $access['is_logged_in']
+    ? (int) ($access['free_tests_remaining'] ?? 0)
+    : (int) ($access['guest_tests_remaining'] ?? 0);
 
-if ($access['is_logged_in'] && !$access['has_active_plan']) {
-    setFlash('auth_message', 'Activate your plan to continue with unlimited typing tests.');
+if ($access['is_logged_in'] && !$access['has_active_plan'] && $remainingTests <= 0) {
+    setFlash('auth_message', 'Your 5 free tests are finished. Activate your plan to continue.');
     redirect('payment.php');
 }
 
-$remainingTests = $access['guest_tests_remaining'];
-
 if (!$access['is_logged_in'] && $remainingTests <= 0) {
-    setFlash('auth_message', 'Your 5 free guest tests are finished. Create an account to continue and activate 30-day access.');
+    setFlash('auth_message', 'Your 5 free tests are finished. Create an account to continue and activate 30-day access.');
     redirect('account/register.php');
 }
 
@@ -25,11 +26,15 @@ $languages = [];
 $schemaReady = dbTableExists($conn, 'languages') && dbTableExists($conn, 'exam_types') && dbTableExists($conn, 'passages');
 
 if ($schemaReady) {
+    ensureTypingLevelsForAllLanguages($conn);
     $result = $conn->query("SELECT id, name FROM languages ORDER BY name ASC");
-    while ($row = $result->fetch_assoc()) {
+
+    while ($result && ($row = $result->fetch_assoc())) {
         $languages[] = $row;
     }
 }
+
+$levelOptions = getTypingLevelDefinitions();
 ?>
 
 <?php include 'includes/header.php'; ?>
@@ -51,7 +56,11 @@ if ($schemaReady) {
               <h3 class="mb-2">Select Typing Preferences</h3>
               <p class="text-muted mb-0">
                 <?php if ($access['is_logged_in']) { ?>
-                  Your plan is active. Enjoy unlimited typing tests.
+                  <?php if ($access['has_active_plan']) { ?>
+                    Your plan is active. Enjoy unlimited typing tests.
+                  <?php } else { ?>
+                    You have <?php echo $remainingTests; ?> free tests remaining before plan activation is required.
+                  <?php } ?>
                 <?php } else { ?>
                   Guest mode gives you <?php echo GUEST_TEST_LIMIT; ?> total free tests. Sign up to unlock unlimited access.
                 <?php } ?>
@@ -60,8 +69,13 @@ if ($schemaReady) {
 
             <div class="border rounded-3 px-4 py-3 bg-light">
               <?php if ($access['is_logged_in']) { ?>
-                <div class="fw-semibold">Unlimited access active</div>
-                <small class="text-muted">Plan expires on <?php echo htmlspecialchars($access['student']['expiry_date'] ?? 'N/A'); ?></small>
+                <?php if ($access['has_active_plan']) { ?>
+                  <div class="fw-semibold">Unlimited access active</div>
+                  <small class="text-muted">Plan expires on <?php echo htmlspecialchars($access['student']['expiry_date'] ?? 'N/A'); ?></small>
+                <?php } else { ?>
+                  <div class="fw-semibold">Free tests remaining: <span id="guestTestsRemaining"><?php echo $remainingTests; ?></span> / <?php echo GUEST_TEST_LIMIT; ?></div>
+                  <small class="text-muted">After <?php echo GUEST_TEST_LIMIT; ?> free tests, activate your plan to continue.</small>
+                <?php } ?>
               <?php } else { ?>
                 <div class="fw-semibold">Tests remaining: <span id="guestTestsRemaining"><?php echo $remainingTests; ?></span> / <?php echo GUEST_TEST_LIMIT; ?></div>
                 <small class="text-muted">After <?php echo GUEST_TEST_LIMIT; ?> tests, you will be redirected to sign up.</small>
@@ -69,9 +83,10 @@ if ($schemaReady) {
             </div>
           </div>
 
-          <form id="typingPreferenceForm" action="typing-test.php" method="GET">
+          <form class="" id="typingPreferenceForm" action="typing-test.php" method="GET">
             <input type="hidden" name="language" id="languageName" value="">
-            <input type="hidden" name="exam_type" id="examTypeName" value="">
+            <input type="hidden" name="level" id="levelSlug" value="">
+            <input type="hidden" name="exam_type" id="levelName" value="">
             <input type="hidden" name="time" id="timeSeconds" value="">
             <input type="hidden" name="guest_attempts_used" id="guestAttemptsUsed" value="<?php echo (int) $access['guest_attempts_used']; ?>">
 
@@ -88,40 +103,56 @@ if ($schemaReady) {
                 </select>
               </div>
 
-              <div class="col-md-2">
-                <label class="form-label">Exam Type</label>
-                <select name="exam_type_id" id="examTypeSelect" class="form-select border-dark" disabled required>
-                  <option value="">Select</option>
+              <div class="col-md-3">
+                <label class="form-label">Your Level</label>
+                <select name="level_select" id="levelSelect" class="form-select border-dark" disabled required>
+                  <option value="">Select language first</option>
+                  <?php foreach ($levelOptions as $slug => $option) { ?>
+                    <option value="<?php echo htmlspecialchars($slug); ?>" data-label="<?php echo htmlspecialchars($option['label']); ?>">
+                      <?php echo htmlspecialchars($option['label']); ?>
+                    </option>
+                  <?php } ?>
                 </select>
               </div>
 
               <div class="col-md-3">
                 <label class="form-label">Passage</label>
                 <select name="paragraph" id="passageSelect" class="form-select border-dark" disabled required>
-                  <option value="">Select</option>
+                  <option value="">Select level first</option>
                 </select>
-                <div id="passageHelp" class="form-text">Choose a passage that matches your selected language and exam.</div>
+                <div id="passageHelp" class="form-text">Choose a passage that matches your selected language and level.</div>
               </div>
 
               <div class="col-md-2">
-                <label class="form-label">Time (minutes)</label>
-                <input type="number" id="timeMinutes" class="form-control border-dark" min="1" max="30" value="5" <?php echo $schemaReady ? '' : 'disabled'; ?> required>
-                <div class="form-text">Auto-filled from exam type, but you can edit it.</div>
+                <label class="form-label">Time Selection</label>
+                <select id="timePresetSelect" class="form-select border-dark" <?php echo $schemaReady ? '' : 'disabled'; ?> required>
+                  <option value="custom">Custom Time</option>
+                  <option value="2">2 min</option>
+                  <option value="5">5 min</option>
+                  <option value="7" selected>7 min</option>
+                  <option value="10">10 min</option>
+                  <option value="12">12 min</option>
+                  <option value="15">15 min</option>
+                  <option value="20">20 min</option>
+                </select>
+                <div id="customTimeWrapper" class="mt-2 d-none">
+                  <input type="number" id="customTimeMinutes" class="form-control border-dark" min="1" max="60" placeholder="Enter custom minutes">
+                </div>
               </div>
 
-              <div class="col-md-3">
-                <label class="form-label">Backspace</label>
-                <select name="backspace" id="backspaceSelect" class="form-select border-dark">
+              <div class="col-md-2">
+                <label class="form-label">Backspace/Delete</label>
+                <select name="delete_key" id="deleteKeySelect" class="form-select border-dark">
                   <option value="on" selected>On</option>
                   <option value="off">Off</option>
                 </select>
-                <div class="form-text">Control whether backspace is allowed during the test.</div>
+                <div class="form-text">Turn delete and backspace keys on or off during the test.</div>
               </div>
             </div>
 
             <div id="loadingState" class="d-none mt-4 text-muted">
               <div class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></div>
-              Loading options...
+              Loading passages...
             </div>
 
             <div class="d-flex flex-column flex-md-row justify-content-center gap-3 mt-4">
@@ -130,6 +161,19 @@ if ($schemaReady) {
               <?php if (!$access['is_logged_in']) { ?>
                 <a href="account/register.php" class="btn btn-outline-dark px-5 py-2">Sign Up for Unlimited Access</a>
               <?php } ?>
+            </div>
+
+            <div id="startCountdownPanel" class="alert alert-light border mt-3 d-none" role="status">
+              <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+                <div>
+                  <div class="fw-semibold">Test will start in <span id="startCountdownValue">10</span> seconds.</div>
+                  <div class="small text-muted">Use Skip to open the test now or Cancel to change your preferences.</div>
+                </div>
+                <div class="d-flex gap-2">
+                  <button type="button" id="skipCountdownBtn" class="btn btn-dark btn-sm">Skip</button>
+                  <button type="button" id="cancelCountdownBtn" class="btn btn-outline-secondary btn-sm">Cancel</button>
+                </div>
+              </div>
             </div>
           </form>
         </div>
@@ -142,32 +186,71 @@ if ($schemaReady) {
 const isLoggedIn = <?php echo $access['is_logged_in'] ? 'true' : 'false'; ?>;
 const serverRemaining = <?php echo (int) $remainingTests; ?>;
 const schemaReady = <?php echo $schemaReady ? 'true' : 'false'; ?>;
+const typingLevels = <?php echo json_encode(array_map(
+  static function ($slug, $definition) {
+    return [
+      'slug' => $slug,
+      'label' => $definition['label']
+    ];
+  },
+  array_keys(getTypingLevelDefinitions()),
+  getTypingLevelDefinitions()
+), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
 const languageSelect = document.getElementById('languageSelect');
-const examTypeSelect = document.getElementById('examTypeSelect');
+const levelSelect = document.getElementById('levelSelect');
 const passageSelect = document.getElementById('passageSelect');
-const timeMinutesInput = document.getElementById('timeMinutes');
+const timePresetSelect = document.getElementById('timePresetSelect');
+const customTimeWrapper = document.getElementById('customTimeWrapper');
+const customTimeMinutes = document.getElementById('customTimeMinutes');
 const timeSecondsInput = document.getElementById('timeSeconds');
 const languageNameInput = document.getElementById('languageName');
-const examTypeNameInput = document.getElementById('examTypeName');
+const levelSlugInput = document.getElementById('levelSlug');
+const levelNameInput = document.getElementById('levelName');
 const loadingState = document.getElementById('loadingState');
 const passageHelp = document.getElementById('passageHelp');
 const typingPreferenceForm = document.getElementById('typingPreferenceForm');
 const startTestBtn = document.getElementById('startTestBtn');
+const startCountdownPanel = document.getElementById('startCountdownPanel');
+const startCountdownValue = document.getElementById('startCountdownValue');
+const skipCountdownBtn = document.getElementById('skipCountdownBtn');
+const cancelCountdownBtn = document.getElementById('cancelCountdownBtn');
 const guestTestsRemainingLabel = document.getElementById('guestTestsRemaining');
 const guestAttemptsUsedInput = document.getElementById('guestAttemptsUsed');
 let isCountdownRunning = false;
+let countdownTimerId = null;
 
 function updateSubmissionFields() {
   const selectedLanguage = languageSelect.options[languageSelect.selectedIndex];
-  const selectedExamType = examTypeSelect.options[examTypeSelect.selectedIndex];
+  const selectedLevel = levelSelect.options[levelSelect.selectedIndex];
 
   languageNameInput.value = selectedLanguage?.text || '';
-  examTypeNameInput.value = selectedExamType?.dataset.name || selectedExamType?.text || '';
-  timeSecondsInput.value = String(Math.max(1, Number(timeMinutesInput.value || 1)) * 60);
+  levelSlugInput.value = selectedLevel?.value || '';
+  levelNameInput.value = selectedLevel?.dataset.label || selectedLevel?.text || '';
+  timeSecondsInput.value = String(getSelectedMinutes() * 60);
 
   if (guestAttemptsUsedInput && !isLoggedIn) {
     guestAttemptsUsedInput.value = String(Number(localStorage.getItem('guestTestAttempts') || '0'));
   }
+}
+
+function getSelectedMinutes() {
+  if (timePresetSelect.value === 'custom') {
+    return Math.max(1, Number(customTimeMinutes.value || 1));
+  }
+
+  return Math.max(1, Number(timePresetSelect.value || 5));
+}
+
+function toggleCustomTime() {
+  const isCustom = timePresetSelect.value === 'custom';
+  customTimeWrapper.classList.toggle('d-none', !isCustom);
+  customTimeMinutes.required = isCustom;
+
+  if (!isCustom) {
+    customTimeMinutes.value = '';
+  }
+
+  timeSecondsInput.value = String(getSelectedMinutes() * 60);
 }
 
 function beginStartCountdown() {
@@ -176,22 +259,57 @@ function beginStartCountdown() {
   }
 
   isCountdownRunning = true;
-  let countdown = 5;
+  let countdown = 10;
   startTestBtn.disabled = true;
-  startTestBtn.textContent = `Starting in ${countdown}`;
+  startTestBtn.textContent = 'Preparing Test...';
+  startCountdownPanel.classList.remove('d-none');
+  startCountdownValue.textContent = String(countdown);
 
-  const countdownTimer = window.setInterval(() => {
+  countdownTimerId = window.setInterval(() => {
     countdown--;
 
     if (countdown > 0) {
-      startTestBtn.textContent = `Starting in ${countdown}`;
+      startCountdownValue.textContent = String(countdown);
       return;
     }
 
-    window.clearInterval(countdownTimer);
+    window.clearInterval(countdownTimerId);
+    countdownTimerId = null;
+    startCountdownValue.textContent = '0';
     startTestBtn.textContent = 'Opening Test...';
     window.setTimeout(() => typingPreferenceForm.submit(), 300);
   }, 1000);
+}
+
+function resetStartCountdown() {
+  if (countdownTimerId !== null) {
+    window.clearInterval(countdownTimerId);
+    countdownTimerId = null;
+  }
+
+  isCountdownRunning = false;
+  startCountdownPanel.classList.add('d-none');
+  startCountdownValue.textContent = '10';
+
+  if (startTestBtn) {
+    startTestBtn.disabled = false;
+    startTestBtn.textContent = 'Start Test';
+  }
+}
+
+function skipStartCountdown() {
+  if (!isCountdownRunning) {
+    return;
+  }
+
+  if (countdownTimerId !== null) {
+    window.clearInterval(countdownTimerId);
+    countdownTimerId = null;
+  }
+
+  startCountdownValue.textContent = '0';
+  startTestBtn.textContent = 'Opening Test...';
+  window.setTimeout(() => typingPreferenceForm.submit(), 150);
 }
 
 function setLoading(isLoading) {
@@ -201,6 +319,20 @@ function setLoading(isLoading) {
 function resetSelect(select, placeholder) {
   select.innerHTML = `<option value="">${placeholder}</option>`;
   select.disabled = true;
+}
+
+function populateLevels() {
+  levelSelect.innerHTML = '<option value="">Select level</option>';
+
+  typingLevels.forEach((level) => {
+    const option = document.createElement('option');
+    option.value = level.slug;
+    option.dataset.label = level.label;
+    option.textContent = level.label;
+    levelSelect.appendChild(option);
+  });
+
+  levelSelect.disabled = false;
 }
 
 async function fetchJson(url) {
@@ -218,38 +350,13 @@ async function fetchJson(url) {
   return data;
 }
 
-async function loadExamTypes(languageId) {
-  resetSelect(examTypeSelect, 'Loading exam types...');
-  resetSelect(passageSelect, 'Select exam type first');
-  passageHelp.textContent = 'Choose a passage that matches your selected language and exam.';
-  setLoading(true);
-
-  try {
-    const data = await fetchJson(`get_exam_types.php?language_id=${encodeURIComponent(languageId)}`);
-    resetSelect(examTypeSelect, data.exam_types.length ? 'Select exam type' : 'No exam type available');
-
-    data.exam_types.forEach((examType) => {
-      const option = document.createElement('option');
-      option.value = examType.id;
-      option.textContent = `${examType.name} (${examType.wpm} WPM)`;
-      option.dataset.name = examType.name;
-      option.dataset.timeLimit = examType.time_limit;
-      examTypeSelect.appendChild(option);
-    });
-
-    examTypeSelect.disabled = data.exam_types.length === 0;
-  } finally {
-    setLoading(false);
-  }
-}
-
-async function loadPassages(languageId, examTypeId) {
+async function loadPassages(languageId, levelSlug) {
   resetSelect(passageSelect, 'Loading passages...');
   passageHelp.textContent = 'Loading passages...';
   setLoading(true);
 
   try {
-    const data = await fetchJson(`get_passages.php?language_id=${encodeURIComponent(languageId)}&exam_type_id=${encodeURIComponent(examTypeId)}`);
+    const data = await fetchJson(`get_passages.php?language_id=${encodeURIComponent(languageId)}&level=${encodeURIComponent(levelSlug)}`);
     resetSelect(passageSelect, data.passages.length ? 'Select passage' : 'No passage available');
 
     data.passages.forEach((passage) => {
@@ -260,7 +367,9 @@ async function loadPassages(languageId, examTypeId) {
     });
 
     passageSelect.disabled = data.passages.length === 0;
-    passageHelp.textContent = data.passages.length ? 'Choose a passage that matches your selected language and exam.' : 'No passage available for this language and exam type.';
+    passageHelp.textContent = data.passages.length
+      ? 'Choose a passage that matches your selected language and level.'
+      : 'No passage available for this language and level.';
   } finally {
     setLoading(false);
   }
@@ -284,52 +393,58 @@ if (!isLoggedIn) {
   }
 }
 
+toggleCustomTime();
+updateSubmissionFields();
+
 if (schemaReady) {
-  languageSelect.addEventListener('change', async () => {
+  languageSelect.addEventListener('change', () => {
     const selectedOption = languageSelect.options[languageSelect.selectedIndex];
     languageNameInput.value = selectedOption?.text || '';
-    examTypeNameInput.value = '';
-    timeMinutesInput.value = '5';
-    timeSecondsInput.value = String(5 * 60);
+    levelSlugInput.value = '';
+    levelNameInput.value = '';
+    resetSelect(passageSelect, 'Select level first');
+    passageHelp.textContent = 'Choose a passage that matches your selected language and level.';
 
     if (!languageSelect.value) {
-      resetSelect(examTypeSelect, 'Select language first');
-      resetSelect(passageSelect, 'Select exam type first');
+      resetSelect(levelSelect, 'Select language first');
       return;
     }
 
-    await loadExamTypes(languageSelect.value);
+    populateLevels();
   });
 
-  examTypeSelect.addEventListener('change', async () => {
-    const selectedOption = examTypeSelect.options[examTypeSelect.selectedIndex];
-    examTypeNameInput.value = selectedOption?.dataset.name || '';
+  levelSelect.addEventListener('change', async () => {
+    const selectedOption = levelSelect.options[levelSelect.selectedIndex];
+    levelSlugInput.value = selectedOption?.value || '';
+    levelNameInput.value = selectedOption?.dataset.label || '';
 
-    if (selectedOption?.dataset.timeLimit) {
-      const minutes = Math.max(1, Math.round(Number(selectedOption.dataset.timeLimit) / 60));
-      timeMinutesInput.value = String(minutes);
-      timeSecondsInput.value = String(minutes * 60);
-    }
-
-    if (!examTypeSelect.value || !languageSelect.value) {
-      resetSelect(passageSelect, 'Select exam type first');
+    if (!levelSelect.value || !languageSelect.value) {
+      resetSelect(passageSelect, 'Select level first');
       return;
     }
 
-    await loadPassages(languageSelect.value, examTypeSelect.value);
+    await loadPassages(languageSelect.value, levelSelect.value);
   });
 
-  timeMinutesInput.addEventListener('input', () => {
-    const minutes = Math.max(1, Number(timeMinutesInput.value || 1));
-    timeSecondsInput.value = String(Math.round(minutes * 60));
+  timePresetSelect.addEventListener('change', toggleCustomTime);
+  customTimeMinutes.addEventListener('input', () => {
+    timeSecondsInput.value = String(getSelectedMinutes() * 60);
   });
+  skipCountdownBtn.addEventListener('click', skipStartCountdown);
+  cancelCountdownBtn.addEventListener('click', resetStartCountdown);
 
   typingPreferenceForm.addEventListener('submit', (event) => {
     event.preventDefault();
     updateSubmissionFields();
 
-    if (!languageSelect.value || !examTypeSelect.value || !passageSelect.value) {
-      alert('Please select language, exam type, and passage first.');
+    if (!languageSelect.value || !levelSelect.value || !passageSelect.value) {
+      alert('Please select language, level, and passage first.');
+      return;
+    }
+
+    if (timePresetSelect.value === 'custom' && !customTimeMinutes.value) {
+      alert('Please enter custom time in minutes.');
+      customTimeMinutes.focus();
       return;
     }
 

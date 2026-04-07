@@ -1,5 +1,9 @@
-<?php include 'includes/header.php'; ?>
-<link rel="stylesheet" href="assets/css/style.css">
+<?php
+require_once __DIR__ . '/includes/init.php';
+$pageTitle = 'Privacy Policy | ' . APP_NAME;
+$metaDescription = 'Privacy policy for Ahilya Typing outlining data collection, usage, and protection.';
+include 'includes/header.php';
+?>
 
 <section class="my-5 min-vh-100">
   <div class="container">

@@ -12,56 +12,47 @@ $error = '';
 $success = '';
 $formData = [
     'language_id' => '',
-    'exam_type_id' => '',
+    'level' => '',
     'content' => ''
 ];
 $languages = [];
-$examTypeMap = [];
+$levelDefinitions = getTypingLevelDefinitions();
 
 if ($schemaReady) {
+    ensureTypingLevelsForAllLanguages($conn);
+
     if ($result = $conn->query("SELECT id, name FROM languages ORDER BY name ASC")) {
         while ($row = $result->fetch_assoc()) {
             $languages[] = $row;
-        }
-    }
-
-    if ($result = $conn->query("SELECT id, language_id, name, wpm FROM exam_types ORDER BY language_id ASC, wpm ASC, name ASC")) {
-        while ($row = $result->fetch_assoc()) {
-            $languageId = (int) $row['language_id'];
-            if (!isset($examTypeMap[$languageId])) {
-                $examTypeMap[$languageId] = [];
-            }
-            $examTypeMap[$languageId][] = [
-                'id' => (int) $row['id'],
-                'name' => $row['name'],
-                'wpm' => (int) $row['wpm']
-            ];
         }
     }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $formData['language_id'] = getSafePost('language_id', '');
-    $formData['exam_type_id'] = getSafePost('exam_type_id', '');
+    $formData['level'] = normalizeTypingLevelSlug(getSafePost('level', ''));
     $formData['content'] = trim($_POST['content'] ?? '');
 
     if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
         $error = 'Session expired. Please try again.';
     } elseif ($schemaReady) {
         $languageId = (int) $formData['language_id'];
-        $examTypeId = (int) $formData['exam_type_id'];
+        $levelSlug = $formData['level'];
 
-        if ($languageId <= 0 || $examTypeId <= 0 || $formData['content'] === '') {
-            $error = 'Language, exam type, and content are required.';
+        if ($languageId <= 0 || $levelSlug === '' || $formData['content'] === '') {
+            $error = 'Language, level, and content are required.';
         } else {
-            $stmt = $conn->prepare("INSERT INTO passages (language_id, exam_type_id, content) VALUES (?, ?, ?)");
+            $examTypeId = getTypingLevelExamTypeId($conn, $languageId, $levelSlug);
+            $stmt = $examTypeId > 0
+                ? $conn->prepare("INSERT INTO passages (language_id, exam_type_id, content) VALUES (?, ?, ?)")
+                : false;
 
             if ($stmt) {
                 $stmt->bind_param("iis", $languageId, $examTypeId, $formData['content']);
                 $stmt->execute();
                 $stmt->close();
                 $success = 'Paragraph saved successfully.';
-                $formData = ['language_id' => '', 'exam_type_id' => '', 'content' => ''];
+                $formData = ['language_id' => '', 'level' => '', 'content' => ''];
             } else {
                 $error = 'Unable to save paragraph.';
             }
@@ -78,7 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute();
                 $stmt->close();
                 $success = 'Paragraph saved successfully.';
-                $formData = ['language_id' => '', 'exam_type_id' => '', 'content' => ''];
+                $formData = ['language_id' => '', 'level' => '', 'content' => ''];
             } else {
                 $error = 'Unable to save paragraph.';
             }
@@ -89,14 +80,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 ?>
 
-<div class="card border-0 shadow-sm">
-    <div class="card-body">
-        <div class="d-flex justify-content-between align-items-center mb-4">
+<div class="container-fluid px-0">
+    <div class="bg-white shadow-sm rounded-3 p-4">
+        <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3 mb-4">
             <div>
                 <h3 class="mb-1">Add Paragraph</h3>
-                <p class="text-muted mb-0">Save a paragraph for the exact language and exam type students will practice.</p>
+                <p class="text-muted mb-0">Save a paragraph for the selected language and level.</p>
             </div>
-            <a href="dashboard.php?page=paragraphs" class="btn btn-outline-dark">Back</a>
+            <a href="dashboard.php?page=paragraphs" class="btn btn-outline-dark btn-sm">Back</a>
         </div>
 
         <?php if (!empty($success)) echo successAlert(htmlspecialchars($success)); ?>
@@ -109,7 +100,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="row g-3">
                     <div class="col-md-6">
                         <label class="form-label">Language</label>
-                        <select name="language_id" id="languageId" class="form-select border-dark">
+                        <select name="language_id" class="form-select border-dark">
                             <option value="">Select language</option>
                             <?php foreach ($languages as $language) { ?>
                                 <option value="<?php echo (int) $language['id']; ?>" <?php echo (string) $formData['language_id'] === (string) $language['id'] ? 'selected' : ''; ?>>
@@ -120,9 +111,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label">Exam Type</label>
-                        <select name="exam_type_id" id="examTypeId" class="form-select border-dark">
-                            <option value="">Select exam type</option>
+                        <label class="form-label">Level</label>
+                        <select name="level" class="form-select border-dark">
+                            <option value="">Select level</option>
+                            <?php foreach ($levelDefinitions as $slug => $definition) { ?>
+                                <option value="<?php echo htmlspecialchars($slug); ?>" <?php echo $formData['level'] === $slug ? 'selected' : ''; ?>>
+                                    <?php echo htmlspecialchars($definition['label']); ?>
+                                </option>
+                            <?php } ?>
                         </select>
                     </div>
                 </div>
@@ -140,7 +136,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="mt-3">
                 <label class="form-label">Paragraph Content</label>
                 <textarea name="content" rows="8" class="form-control border-dark" required><?php echo htmlspecialchars($formData['content']); ?></textarea>
-                <div class="form-text text-muted">Line breaks and paragraph spacing are shown in the student typing test exactly as entered here.</div>
+                <div class="form-text text-muted">Line breaks and paragraph spacing are shown in the typing test exactly as entered here.</div>
             </div>
 
             <div class="mt-4">
@@ -149,42 +145,3 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </form>
     </div>
 </div>
-
-<?php if ($schemaReady) { ?>
-<script>
-const adminExamTypeMap = <?php echo json_encode($examTypeMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
-const adminLanguageSelect = document.getElementById('languageId');
-const adminExamTypeSelect = document.getElementById('examTypeId');
-const selectedAdminExamTypeId = '<?php echo htmlspecialchars((string) $formData['exam_type_id']); ?>';
-
-function renderAdminExamTypes(languageId) {
-    adminExamTypeSelect.innerHTML = '<option value="">Select exam type</option>';
-    const items = adminExamTypeMap[languageId] || [];
-
-    items.forEach((item) => {
-        const option = document.createElement('option');
-        option.value = item.id;
-        option.textContent = `${item.name} (${item.wpm} WPM)`;
-        if (String(item.id) === selectedAdminExamTypeId) {
-            option.selected = true;
-        }
-        adminExamTypeSelect.appendChild(option);
-    });
-}
-
-if (adminLanguageSelect && adminExamTypeSelect) {
-    renderAdminExamTypes(adminLanguageSelect.value);
-    adminLanguageSelect.addEventListener('change', () => {
-        adminExamTypeSelect.innerHTML = '<option value="">Select exam type</option>';
-        const items = adminExamTypeMap[adminLanguageSelect.value] || [];
-
-        items.forEach((item) => {
-            const option = document.createElement('option');
-            option.value = item.id;
-            option.textContent = `${item.name} (${item.wpm} WPM)`;
-            adminExamTypeSelect.appendChild(option);
-        });
-    });
-}
-</script>
-<?php } ?>

@@ -7,12 +7,24 @@ if (isAdminLoggedIn()) {
 
 $error = '';
 $loginScope = 'admin_login';
+$captchaScope = 'admin_login_captcha';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
         $error = 'Your session expired. Please try again.';
     } elseif (isLoginRateLimited($loginScope, $secondsRemaining)) {
         $error = getLoginRateLimitMessage($secondsRemaining);
+    } elseif (!verifyHumanVerification($captchaScope, $_POST['captcha_answer'] ?? '', $_POST['g-recaptcha-response'] ?? '')) {
+        recordLoginFailure($loginScope);
+        refreshHumanVerification($captchaScope);
+
+        if (isLoginRateLimited($loginScope, $secondsRemaining)) {
+            $error = getLoginRateLimitMessage($secondsRemaining);
+        } else {
+            $error = isRecaptchaEnabled()
+                ? 'Please complete the reCAPTCHA verification.'
+                : 'Please solve the captcha correctly.';
+        }
     } else {
         $username = getSafePost('username', '');
         $password = $_POST['password'] ?? '';
@@ -27,6 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($admin && password_verify($password, $admin['password'])) {
                 clearLoginRateLimit($loginScope);
+                clearHumanVerification($captchaScope);
                 session_regenerate_id(true);
                 $_SESSION[ADMIN_SESSION_KEY] = (int) $admin['id'];
                 redirect('admin/dashboard.php');
@@ -34,6 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         recordLoginFailure($loginScope);
+        refreshHumanVerification($captchaScope);
         if (isLoginRateLimited($loginScope, $secondsRemaining)) {
             $error = getLoginRateLimitMessage($secondsRemaining);
         } else {
@@ -41,6 +55,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
+
+$captcha = getCaptchaChallenge($captchaScope);
 ?>
 
 <?php include("../includes/header.php"); ?>
@@ -53,6 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <h3 class="text-center mb-4">Admin Login</h3>
 
                     <?php if (!empty($error)) echo errorAlert(htmlspecialchars($error)); ?>
+                    <?php if ($flash = getFlash('admin_auth_message')) echo successAlert(htmlspecialchars($flash)); ?>
 
                     <form method="POST" novalidate>
                         <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrfToken()); ?>">
@@ -67,12 +84,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <input type="password" name="password" class="form-control" required autocomplete="current-password">
                         </div>
 
+                        <div class="mb-3">
+                            <label class="form-label"><?php echo isRecaptchaEnabled() ? 'Verification' : 'Captcha'; ?></label>
+                            <?php if (isRecaptchaEnabled()) { ?>
+                                <div class="g-recaptcha" data-sitekey="<?php echo htmlspecialchars(getRecaptchaSiteKey()); ?>"></div>
+                            <?php } else { ?>
+                                <div class="input-group">
+                                    <span class="input-group-text"><?php echo htmlspecialchars($captcha['question']); ?></span>
+                                    <input type="text" name="captcha_answer" class="form-control" placeholder="Enter answer" required inputmode="numeric">
+                                </div>
+                            <?php } ?>
+                        </div>
+
                         <button type="submit" class="btn btn-dark w-100">Login</button>
                     </form>
+
+                    <div class="text-center mt-3">
+                        <a href="forgot-password.php">Forgot password?</a>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+<?php if (isRecaptchaEnabled()) { ?>
+<script src="https://www.google.com/recaptcha/api.js" async defer></script>
+<?php } ?>
 
 <?php include("../includes/footer.php"); ?>

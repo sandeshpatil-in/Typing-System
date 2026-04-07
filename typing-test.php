@@ -13,35 +13,53 @@ $examTypeId = (int) getSafeGet('exam_type_id', 0);
 $passageId = (int) getSafeGet('paragraph', 1);
 $language = getSafeGet('language', 'english');
 $time = (int) getSafeGet('time', 60);
-$exam = getSafeGet('exam_type', 'normal');
-$allowBackspace = strtolower((string) getSafeGet('backspace', 'on')) !== 'off';
+$levelSlug = normalizeTypingLevelSlug(getSafeGet('level', 'skill_test'));
+$exam = getSafeGet('exam_type', getTypingLevelLabel($levelSlug));
+$allowDeleteKey = strtolower((string) getSafeGet('delete_key', getSafeGet('backspace', 'on'))) !== 'off';
 $baseFontSize = 16;
 $normalizedLanguage = strtolower(trim((string) $language));
 $isIndicLanguage = in_array($normalizedLanguage, ['marathi', 'hindi'], true);
 
 $paragraph = "No paragraph found.";
 
-if (dbTableExists($conn, 'passages') && dbTableExists($conn, 'languages') && dbTableExists($conn, 'exam_types') && $languageId > 0 && $examTypeId > 0) {
-    $stmt = $conn->prepare(
-        "SELECT p.content, l.name AS language_name, e.name AS exam_type_name, e.time_limit
-         FROM passages p
-         INNER JOIN languages l ON l.id = p.language_id
-         INNER JOIN exam_types e ON e.id = p.exam_type_id
-         WHERE p.id = ? AND p.language_id = ? AND p.exam_type_id = ?"
-    );
-    $stmt->bind_param("iii", $passageId, $languageId, $examTypeId);
-    $stmt->execute();
-    $data = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
+if (dbTableExists($conn, 'passages') && dbTableExists($conn, 'languages') && dbTableExists($conn, 'exam_types') && $languageId > 0 && $passageId > 0) {
+    $allowedExamTypeIds = [];
 
-    if ($data) {
-        $paragraph = $data['content'];
-        $language = strtolower($data['language_name']);
-        $normalizedLanguage = strtolower(trim((string) $language));
-        $isIndicLanguage = in_array($normalizedLanguage, ['marathi', 'hindi'], true);
-        $exam = $data['exam_type_name'];
-        if (empty($_GET['time'])) {
-            $time = (int) $data['time_limit'];
+    if ($levelSlug !== '') {
+        $allowedExamTypeIds = getTypingLevelExamTypeIds($conn, $languageId, $levelSlug);
+    } elseif ($examTypeId > 0) {
+        $allowedExamTypeIds = [$examTypeId];
+    }
+
+    $allowedExamTypeIds = array_values(array_unique(array_filter(array_map('intval', $allowedExamTypeIds))));
+
+    if (!empty($allowedExamTypeIds)) {
+        $placeholders = implode(', ', array_fill(0, count($allowedExamTypeIds), '?'));
+        $types = 'ii' . str_repeat('i', count($allowedExamTypeIds));
+        $values = array_merge([$passageId, $languageId], $allowedExamTypeIds);
+        $stmt = $conn->prepare(
+            "SELECT p.content, l.name AS language_name, e.name AS exam_type_name, e.wpm, e.time_limit
+             FROM passages p
+             INNER JOIN languages l ON l.id = p.language_id
+             INNER JOIN exam_types e ON e.id = p.exam_type_id
+             WHERE p.id = ? AND p.language_id = ? AND p.exam_type_id IN ({$placeholders})"
+        );
+
+        if ($stmt) {
+            $stmt->bind_param($types, ...$values);
+            $stmt->execute();
+            $data = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+
+            if ($data) {
+                $paragraph = $data['content'];
+                $language = strtolower($data['language_name']);
+                $normalizedLanguage = strtolower(trim((string) $language));
+                $isIndicLanguage = in_array($normalizedLanguage, ['marathi', 'hindi'], true);
+                $resolvedLevelSlug = detectTypingLevelSlugFromExamType($data['exam_type_name'] ?? '', (int) ($data['wpm'] ?? 0));
+                $levelSlug = $resolvedLevelSlug !== '' ? $resolvedLevelSlug : $levelSlug;
+                $exam = getTypingLevelLabel($levelSlug);
+            }
         }
     }
 } else {
@@ -218,12 +236,12 @@ textarea {
 
   <div class="toolbar-group">
     <?php if ($isIndicLanguage) { ?>
-      <button type="button" id="keyboardToggleBtn" class="btn btn-light btn-sm"><i class="fas fa-keyboard"></i>Keyboard</button>
+      <button type="button" id="keyboardToggleBtn" class="btn btn-light btn-sm"><i class="fas fa-keyboard">Keyboard</i></button>
     <?php } ?>
 
-    <button type="button" class="btn btn-light btn-sm" onclick="setLayout('lr')" title="Left-Right"><i class="fas fa-arrows-alt-h">LR</i></button>
-    <button type="button" class="btn btn-light btn-sm" onclick="setLayout('tb')" title="Top-Bottom"><i class="fas fa-arrows-alt-v">TB</i></button>
-    <button type="button" class="btn btn-light btn-sm" onclick="setLayout('single')" title="Single View"><i class="fas fa-square">S</i></button>
+    <button type="button" class="btn btn-light btn-sm" onclick="setLayout('lr')" title="Left-Right"><i class="fas fa-arrows-alt-h"></i></button>
+    <button type="button" class="btn btn-light btn-sm" onclick="setLayout('tb')" title="Top-Bottom"><i class="fas fa-arrows-alt-v"></i></button>
+    <button type="button" class="btn btn-light btn-sm" onclick="setLayout('single')" title="Single View"><i class="fas fa-square"></i></button>
     <div class="d-flex align-items-center gap-1 ms-2">
       <button type="button" id="fontSizeDown" class="btn btn-light btn-sm" title="Decrease font size">A-</button>
       <span id="fontSizeValue" class="text-light small px-1">12px</span>
@@ -273,10 +291,11 @@ let remainingTime = totalTime;
 const timerEl = document.getElementById('timer');
 const submitTestBtn = document.getElementById('submitTestBtn');
 const isLoggedIn = <?php echo $access['is_logged_in'] ? 'true' : 'false'; ?>;
+const currentAccessType = '<?php echo $access['has_active_plan'] ? 'paid' : 'guest'; ?>';
 const isIndicLanguage = <?php echo $isIndicLanguage ? 'true' : 'false'; ?>;
-const allowBackspace = <?php echo $allowBackspace ? 'true' : 'false'; ?>;
+const allowDeleteKey = <?php echo $allowDeleteKey ? 'true' : 'false'; ?>;
 const typingOptions = {
-  allowBackspace: allowBackspace
+  allowDeleteKey: allowDeleteKey
 };
 const csrfToken = '<?php echo htmlspecialchars(csrfToken()); ?>';
 let isSubmitting = false;
@@ -316,9 +335,9 @@ function applyFontSize(size) {
 
 applyFontSize(currentFontSize);
 
-if (typingArea && !typingOptions.allowBackspace) {
+if (typingArea && !typingOptions.allowDeleteKey) {
   typingArea.addEventListener('keydown', (event) => {
-    if (event.key === 'Backspace' && !event.ctrlKey && !event.metaKey) {
+    if ((event.key === 'Backspace' || event.key === 'Delete') && !event.ctrlKey && !event.metaKey) {
       event.preventDefault();
     }
   });
@@ -574,7 +593,7 @@ async function submitTest() {
         return;
       }
 
-      window.location.href = `result.php?wpm=${wpm}&accuracy=${accuracy}&words=${typedWords}&remaining=${<?php echo (int) $access['guest_tests_remaining']; ?>}&access=${isLoggedIn ? 'paid' : 'guest'}`;
+      window.location.href = `result.php?wpm=${wpm}&accuracy=${accuracy}&words=${typedWords}&remaining=${<?php echo (int) $access['guest_tests_remaining']; ?>}&access=${currentAccessType}`;
       return;
     }
 
@@ -591,7 +610,7 @@ async function submitTest() {
     window.location.href = `result.php?wpm=${wpm}&accuracy=${accuracy}&words=${typedWords}&remaining=${data.guest_tests_remaining}&access=${data.access_type}`;
   } catch (error) {
     alert('Unable to contact the server. Showing your result page anyway.');
-    window.location.href = `result.php?wpm=${wpm}&accuracy=${accuracy}&words=${typedWords}&remaining=${<?php echo (int) $access['guest_tests_remaining']; ?>}&access=${isLoggedIn ? 'paid' : 'guest'}`;
+    window.location.href = `result.php?wpm=${wpm}&accuracy=${accuracy}&words=${typedWords}&remaining=${<?php echo (int) $access['guest_tests_remaining']; ?>}&access=${currentAccessType}`;
   }
 }
 
