@@ -16,113 +16,130 @@ $message = getFlash('auth_message');
 $plan = getLatestPaidPlan($conn, $student['id']);
 $hasPlan = hasActivePlan($student);
 $paymentLabel = getPlanPaymentLabel($plan);
-$attemptSummary = getStudentAttemptSummary($conn, (int) $student['id']);
-$attemptCount = (int) ($attemptSummary['total'] ?? 0);
-$planName = $plan['plan_name'] ?? ($paymentLabel === 'Hand Cash' ? 'Hand Cash Activation' : PLAN_NAME);
-$planStart = $plan['start_date'] ?? ($student['plan_start_date'] ?? 'Not started');
-$planExpiry = $plan['expiry_date'] ?? ($student['expiry_date'] ?? 'Not active');
+$freeTestsRemaining = $hasPlan ? 0 : getStudentFreeTestsRemaining($conn, (int) $student['id']);
+$studentExpiryDisplay = !empty($student['expiry_date']) ? formatDate($student['expiry_date']) : 'Not active';
 
-$attempts = getStudentAttemptsResult($conn, (int) $student['id'], 20);
+$attempts = getStudentAttemptsResult($conn, (int) $student['id'], 10);
 ?>
 
 <?php include("../includes/header.php"); ?>
 
-<div class="container my-5 min-vh-100">
+<div class="container-fluid px-2 px-md-3 px-xl-4 my-4 my-xl-5 min-vh-100">
     <?php if (!empty($message)) echo successAlert(htmlspecialchars($message)); ?>
 
-    <div class="row g-4">
-        <div class="col-lg-4">
-            <div class="card border-dark shadow-sm h-100">
-                <div class="card-body">
-                    <h3 class="mb-3"><?php echo htmlspecialchars($student['name']); ?></h3>
-                    <p class="mb-2"><strong>Email:</strong> <?php echo htmlspecialchars($student['email']); ?></p>
-                    <p class="mb-2"><strong>Plan:</strong> <?php echo $hasPlan ? 'Active' : 'Inactive'; ?></p>
-                    <p class="mb-2"><strong>Payment:</strong> <?php echo htmlspecialchars($paymentLabel); ?></p>
-                    <p class="mb-4"><strong>Expiry:</strong> <?php echo htmlspecialchars((string) ($student['expiry_date'] ?? 'Not active')); ?></p>
+    <div class="bg-body-tertiary rounded-4 p-2 p-md-3">
+        <div class="row g-4 align-items-start flex-lg-nowrap">
+            <div class="col-12 col-lg-3 flex-shrink-0">
+                <div class="sticky-lg-top">
+                    <div class="card bg-dark text-white border-0 shadow-sm rounded-4 mb-4">
+                        <div class="card-body p-4">
+                            <div class="mb-4">
+                                <div class="small  text-white-50 fw-semibold">Wellcome</div>
+                                <h3 class="mb-1"><?php echo htmlspecialchars($student['name']); ?></h3>
+                            </div>
 
-                    <?php if ($hasPlan) { ?>
-                        <a href="../typing-preference.php" class="btn btn-dark w-100 mb-2">Start Typing</a>
-                    <?php } else { ?>
-                        <a href="../payment.php" class="btn btn-dark w-100 mb-2">Activate Plan</a>
-                    <?php } ?>
 
-                    <a href="../typing-preference.php" class="btn btn-outline-dark w-100">View Test Modes</a>
+                            <div class="vstack gap-3">
+                                <div>
+                                    <span class="small text-uppercase text-white-50 fw-semibold d-block mb-1">Email</span>
+                                    <div><?php echo htmlspecialchars($student['email']); ?></div>
+                                </div>
+                                <div>
+                                    <span class="small text-uppercase text-white-50 fw-semibold d-block mb-1">Status</span>
+                                    <span class="badge <?php echo $hasPlan ? 'text-bg-success' : 'text-bg-secondary'; ?>">
+                                        <?php echo $hasPlan ? 'Active' : 'Inactive'; ?>
+                                    </span>
+                                </div>
+                                <div>
+                                    <span class="small text-uppercase text-white-50 fw-semibold d-block mb-1">Payment</span>
+                                    <div><?php echo htmlspecialchars($paymentLabel); ?></div>
+                                </div>
+                                <div>
+                                    <span class="small text-uppercase text-white-50 fw-semibold d-block mb-1">Expiry</span>
+                                    <div><?php echo htmlspecialchars($studentExpiryDisplay); ?></div>
+                                </div>
+                                <?php if (!$hasPlan) { ?>
+                                    <div>
+                                        <span class="small text-uppercase text-white-50 fw-semibold d-block mb-1">Free Tests Left</span>
+                                        <div><?php echo $freeTestsRemaining; ?> / <?php echo GUEST_TEST_LIMIT; ?></div>
+                                    </div>
+                                <?php } ?>
+                            </div>
 
-                    <div class="mt-4 border-top pt-3">
-                        <div class="small text-muted">Total attempts saved</div>
-                        <div class="fw-semibold"><?php echo $attemptCount; ?></div>
-                        <div class="small text-muted mt-1">
-                            Guest free tests: <?php echo min(GUEST_TEST_LIMIT, (int) ($attemptSummary['guest_total'] ?? 0)); ?> / <?php echo GUEST_TEST_LIMIT; ?>
-                            <?php if (($attemptSummary['paid_total'] ?? 0) > 0) { ?>
-                                | Paid attempts: <?php echo (int) ($attemptSummary['paid_total'] ?? 0); ?>
+                                                        <hr class="border-secondary my-4">
+
+
+                            <div class="d-grid gap-2 mb-4">
+                                
+                                <a href="../typing-preference.php" class="btn btn-outline-light text-start d-flex align-items-center gap-2">
+                                    <i class="fas fa-keyboard"></i>
+                                    <span><?php echo $hasPlan ? 'Start Typing' : 'Free Test'; ?></span>
+                                </a>
+                                <a href="<?php echo $hasPlan ? '../typing-preference.php' : '../payment.php'; ?>" class="btn btn-outline-light text-start d-flex align-items-center gap-2">
+                                    <i class="fas fa-credit-card"></i>
+                                    <span><?php echo $hasPlan ? 'Practice Mode' : 'Activate Plan'; ?></span>
+                                </a>
+                                <a href="logout.php" class="btn btn-outline-danger text-start d-flex align-items-center gap-2">
+                                    <i class="fas fa-right-from-bracket"></i>
+                                    <span>Logout</span>
+                                </a>
+                            </div>
+
+                        </div>
+                    </div>
+
+                    <?php if (!$hasPlan) { ?>
+                        <div class="alert alert-warning shadow-sm mb-0">
+                            <?php if ($freeTestsRemaining > 0) { ?>
+                                You can still use <?php echo $freeTestsRemaining; ?> free tests before plan activation is required.
+                            <?php } else { ?>
+                                Your 5 free tests are finished. Activate your plan to continue.
                             <?php } ?>
                         </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-lg-8">
-            <?php if (!$hasPlan) { ?>
-                <div class="alert alert-warning border-dark shadow-sm">
-                    Your plan is not active right now. Pay with Razorpay or contact admin if you already paid by hand cash.
-                </div>
-            <?php } ?>
-
-            <div class="card border-dark shadow-sm mb-4">
-                <div class="card-body">
-                    <h4 class="mb-3">Plan Summary</h4>
-                    <?php if ($plan) { ?>
-                        <div class="row">
-                            <div class="col-md-3"><strong>Plan</strong><div><?php echo htmlspecialchars($planName); ?></div></div>
-                            <div class="col-md-3"><strong>Payment</strong><div><?php echo htmlspecialchars($paymentLabel); ?></div></div>
-                            <div class="col-md-3"><strong>Started</strong><div><?php echo htmlspecialchars((string) $planStart); ?></div></div>
-                            <div class="col-md-3"><strong>Expires</strong><div><?php echo htmlspecialchars((string) $planExpiry); ?></div></div>
-                        </div>
-                    <?php } else { ?>
-                        <p class="mb-0 text-muted">No paid plan found yet. Complete Razorpay payment or ask admin to confirm your hand cash payment to unlock unlimited tests.</p>
                     <?php } ?>
                 </div>
             </div>
 
-            <div class="card border-dark shadow-sm">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h4 class="mb-0">Recent Attempts</h4>
-                        <span class="badge text-bg-light">Last 20 attempts</span>
+            <div class="col-12 col-lg">
+                <div class="card border-0 shadow-sm rounded-4">
+                    <div class="card-body border-bottom p-4">
+                        <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3">
+                            <div>
+                                <h3 class="mb-1">Recent Attempts</h3>
+                                <p class="text-muted mb-0">Your last 10 saved typing attempts.</p>
+                            </div>
+                            <span class="badge text-bg-light border">Latest Records</span>
+                        </div>
                     </div>
 
-                    <div class="table-responsive">
-                        <table class="table table-bordered align-middle mb-0">
-                            <thead class="table-light">
+                    <div class="table-responsive shadow-sm rounded-3">
+                        <table class="table table-bordered table-hover align-middle bg-white mb-0">
+                            <thead class="table-dark">
                                 <tr>
-                                    <th>Date</th>
-                                    <th>Access</th>
-                                    <th>Language</th>
-                                    <th>Exam</th>
-                                    <th>WPM</th>
-                                    <th>Accuracy</th>
-                                    <th>Words</th>
+                                    <th class="text-nowrap small ">Date</th>
+                                    <th class="text-nowrap small  ">Language</th>
+                                    <th class="text-nowrap small  ">Level</th>
+                                    <th class="text-nowrap small">WPM</th>
+                                    <th class="text-nowrap small ">Accuracy</th>
+                                    <th class="text-nowrap small ">Words</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <?php if (!$attempts || $attempts->num_rows === 0) { ?>
-                                    <tr><td colspan="7" class="text-center text-muted">No attempts recorded yet.</td></tr>
+                                    <tr>
+                                        <td colspan="6" class="text-center text-muted py-4">No attempts recorded yet.</td>
+                                    </tr>
                                 <?php } ?>
 
                                 <?php while ($attempts && ($row = $attempts->fetch_assoc())) { ?>
+                                    <?php $wordCount = max(0, (int) ($row['typed_words'] ?? 0)); ?>
                                     <tr>
-                                        <td><?php echo htmlspecialchars($row['created_at']); ?></td>
-                                        <td>
-                                            <span class="badge <?php echo ($row['access_type'] ?? 'paid') === 'guest' ? 'text-bg-warning text-dark' : 'text-bg-success'; ?>">
-                                                <?php echo htmlspecialchars(ucfirst((string) ($row['access_type'] ?? 'paid'))); ?>
-                                            </span>
-                                        </td>
-                                        <td class="text-capitalize"><?php echo htmlspecialchars($row['language']); ?></td>
-                                        <td class="text-capitalize"><?php echo htmlspecialchars($row['exam_type']); ?></td>
-                                        <td><?php echo htmlspecialchars((string) $row['wpm']); ?></td>
-                                        <td><?php echo htmlspecialchars((string) $row['accuracy']); ?>%</td>
-                                        <td><?php echo htmlspecialchars((string) $row['typed_words']); ?></td>
+                                        <td class="text-nowrap"><?php echo htmlspecialchars(formatDate($row['created_at'], 'd-m-Y')); ?></td>
+                                        <td class="text-nowrap text-capitalize"><?php echo htmlspecialchars($row['language']); ?></td>
+                                        <td class="text-nowrap text-capitalize"><?php echo htmlspecialchars($row['exam_type']); ?></td>
+                                        <td class="text-nowrap"><?php echo number_format((float) $row['wpm'], 0); ?></td>
+                                        <td class="text-nowrap"><?php echo number_format((float) $row['accuracy'], 2); ?>%</td>
+                                        <td class="text-nowrap"><?php echo $wordCount; ?></td>
                                     </tr>
                                 <?php } ?>
                             </tbody>

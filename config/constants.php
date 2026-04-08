@@ -100,9 +100,13 @@ define('DB_CHARSET', 'utf8mb4');
 // ==========================================
 // APPLICATION CONFIGURATION
 // ==========================================
-define('APP_NAME', getenv('APP_NAME') ?: 'Ahilya Student Desk');
+define('APP_NAME', getenv('APP_NAME') ?: 'Ahilya Typing');
 define('APP_VERSION', '1.0.0');
 define('APP_ENV', getenv('APP_ENV') ?: 'production'); // development | production
+define('APP_TIMEZONE', getenv('APP_TIMEZONE') ?: 'Asia/Kolkata');
+
+// Ensure all date/time functions use Indian Standard Time
+date_default_timezone_set(APP_TIMEZONE);
 
 // ==========================================
 // PATH CONFIGURATION
@@ -110,7 +114,7 @@ define('APP_ENV', getenv('APP_ENV') ?: 'production'); // development | productio
 $baseUrl = getenv('BASE_URL') ?: detectBaseUrl(dirname(dirname(__FILE__)));
 define('BASE_URL', rtrim($baseUrl, '/') . '/');
 
-//define('BASE_URL', 'https://ahilyastudentdesk.rf.gd/');
+//define('BASE_URL', 'https://ahilyatyping.com/');
 define('ROOT_PATH', dirname(dirname(__FILE__)));
 define('ASSETS_PATH', ROOT_PATH . '/assets/');
 define('INCLUDES_PATH', ROOT_PATH . '/includes/');
@@ -128,8 +132,12 @@ define('ADMIN_SESSION_KEY', 'admin_id');
 define('MAX_LOGIN_ATTEMPTS', 5);
 define('LOGIN_ATTEMPT_TIMEOUT', 900); // 15 minutes
 define('PASSWORD_MIN_LENGTH', 6);
+define('CAPTCHA_EXPIRY_SECONDS', 600);
+define('PASSWORD_RESET_EXPIRY_MINUTES', max(5, (int) (getenv('PASSWORD_RESET_EXPIRY_MINUTES') ?: 30)));
 define('GUEST_TEST_LIMIT', 5);
 define('PLAN_DURATION_DAYS', 30);
+define('ATTEMPT_RETENTION_DAYS', 5);
+define('ATTEMPT_RETENTION_CLEANUP_INTERVAL', 3600); // 1 hour
 
 // ==========================================
 // PAGINATION & LIMITS
@@ -141,11 +149,21 @@ define('TYPING_TEST_MAX_TIME', 600); // 10 minutes max
 // PAYMENT CONFIGURATION
 // ==========================================
 define('PLAN_NAME', 'Pro Monthly');
-define('PLAN_PRICE', 199.00);
+define('PLAN_PRICE', 1.00);
 define('PLAN_PRICE_PAISE', (int) round(PLAN_PRICE * 100));
 define('PAYMENT_CURRENCY', 'INR');
 define('RAZORPAY_KEY_ID', getenv('RAZORPAY_KEY_ID') ?: '');
 define('RAZORPAY_KEY_SECRET', getenv('RAZORPAY_KEY_SECRET') ?: '');
+define('MAIL_FROM_ADDRESS', getenv('MAIL_FROM_ADDRESS') ?: 'no-reply@example.com');
+define('MAIL_FROM_NAME', getenv('MAIL_FROM_NAME') ?: APP_NAME);
+define('MAIL_ENVELOPE_FROM', getenv('MAIL_ENVELOPE_FROM') ?: MAIL_FROM_ADDRESS);
+define('SMTP_HOST', getenv('SMTP_HOST') ?: '');
+define('SMTP_PORT', (int) (getenv('SMTP_PORT') ?: 587));
+define('SMTP_USER', getenv('SMTP_USER') ?: '');
+define('SMTP_PASS', getenv('SMTP_PASS') ?: '');
+define('SMTP_SECURE', strtolower(trim((string) getenv('SMTP_SECURE'))) ?: 'tls'); // tls | ssl | none
+define('RECAPTCHA_SITE_KEY', getenv('RECAPTCHA_SITE_KEY') ?: '');
+define('RECAPTCHA_SECRET_KEY', getenv('RECAPTCHA_SECRET_KEY') ?: '');
 
 // ==========================================
 // ERROR HANDLING

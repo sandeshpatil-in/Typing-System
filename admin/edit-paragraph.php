@@ -17,31 +17,19 @@ if ($id <= 0) {
 
 $paragraph = null;
 $languages = [];
-$examTypeMap = [];
+$levelDefinitions = getTypingLevelDefinitions();
 
 if ($schemaReady) {
+    ensureTypingLevelsForAllLanguages($conn);
+
     if ($result = $conn->query("SELECT id, name FROM languages ORDER BY name ASC")) {
         while ($row = $result->fetch_assoc()) {
             $languages[] = $row;
         }
     }
 
-    if ($result = $conn->query("SELECT id, language_id, name, wpm FROM exam_types ORDER BY language_id ASC, wpm ASC, name ASC")) {
-        while ($row = $result->fetch_assoc()) {
-            $languageId = (int) $row['language_id'];
-            if (!isset($examTypeMap[$languageId])) {
-                $examTypeMap[$languageId] = [];
-            }
-            $examTypeMap[$languageId][] = [
-                'id' => (int) $row['id'],
-                'name' => $row['name'],
-                'wpm' => (int) $row['wpm']
-            ];
-        }
-    }
-
     $stmt = $conn->prepare(
-        "SELECT p.id, p.language_id, p.exam_type_id, p.content, l.name AS language_name, e.name AS exam_type_name
+        "SELECT p.id, p.language_id, p.exam_type_id, p.content, l.name AS language_name, e.name AS exam_type_name, e.wpm AS exam_type_wpm
          FROM passages p
          INNER JOIN languages l ON l.id = p.language_id
          INNER JOIN exam_types e ON e.id = p.exam_type_id
@@ -51,6 +39,10 @@ if ($schemaReady) {
     $stmt->execute();
     $paragraph = $stmt->get_result()->fetch_assoc();
     $stmt->close();
+
+    if ($paragraph) {
+        $paragraph['level'] = detectTypingLevelSlugFromExamType($paragraph['exam_type_name'] ?? '', (int) ($paragraph['exam_type_wpm'] ?? 0));
+    }
 } elseif (function_exists('dbTableExists') && dbTableExists($conn, 'paragraphs')) {
     $stmt = $conn->prepare("SELECT id, language, content FROM paragraphs WHERE id = ?");
     $stmt->bind_param("i", $id);
@@ -68,13 +60,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Session expired. Please try again.';
     } elseif ($schemaReady) {
         $languageId = (int) getSafePost('language_id', $paragraph['language_id']);
-        $examTypeId = (int) getSafePost('exam_type_id', $paragraph['exam_type_id']);
+        $levelSlug = normalizeTypingLevelSlug(getSafePost('level', $paragraph['level'] ?? 'skill_test'));
         $content = trim($_POST['content'] ?? '');
 
-        if ($languageId <= 0 || $examTypeId <= 0 || $content === '') {
-            $error = 'Language, exam type, and content are required.';
+        if ($languageId <= 0 || $levelSlug === '' || $content === '') {
+            $error = 'Language, level, and content are required.';
         } else {
-            $stmt = $conn->prepare("UPDATE passages SET language_id = ?, exam_type_id = ?, content = ? WHERE id = ?");
+            $examTypeId = getTypingLevelExamTypeId($conn, $languageId, $levelSlug);
+            $stmt = $examTypeId > 0
+                ? $conn->prepare("UPDATE passages SET language_id = ?, exam_type_id = ?, content = ? WHERE id = ?")
+                : false;
+
             if ($stmt) {
                 $stmt->bind_param("iisi", $languageId, $examTypeId, $content, $id);
                 $stmt->execute();
@@ -105,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($schemaReady) {
         $stmt = $conn->prepare(
-            "SELECT p.id, p.language_id, p.exam_type_id, p.content, l.name AS language_name, e.name AS exam_type_name
+            "SELECT p.id, p.language_id, p.exam_type_id, p.content, l.name AS language_name, e.name AS exam_type_name, e.wpm AS exam_type_wpm
              FROM passages p
              INNER JOIN languages l ON l.id = p.language_id
              INNER JOIN exam_types e ON e.id = p.exam_type_id
@@ -115,6 +111,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute();
         $paragraph = $stmt->get_result()->fetch_assoc();
         $stmt->close();
+
+        if ($paragraph) {
+            $paragraph['level'] = detectTypingLevelSlugFromExamType($paragraph['exam_type_name'] ?? '', (int) ($paragraph['exam_type_wpm'] ?? 0));
+        }
     } else {
         $stmt = $conn->prepare("SELECT id, language, content FROM paragraphs WHERE id = ?");
         $stmt->bind_param("i", $id);
@@ -125,14 +125,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 ?>
 
-<div class="card border-0 shadow-sm">
-    <div class="card-body">
-        <div class="d-flex justify-content-between align-items-center mb-4">
+<div class="container-fluid px-0">
+    <div class="bg-white shadow-sm rounded-3 p-4">
+        <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3 mb-4">
             <div>
                 <h3 class="mb-1">Edit Paragraph</h3>
-                <p class="text-muted mb-0">Update the paragraph so students see the correct content for the selected language.</p>
+                <p class="text-muted mb-0">Update the paragraph for the selected language and level.</p>
             </div>
-            <a href="dashboard.php?page=paragraphs" class="btn btn-outline-dark">Back</a>
+            <a href="dashboard.php?page=paragraphs" class="btn btn-outline-dark btn-sm">Back</a>
         </div>
 
         <?php if (!empty($success)) echo successAlert(htmlspecialchars($success)); ?>
@@ -145,7 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="row g-3">
                     <div class="col-md-6">
                         <label class="form-label">Language</label>
-                        <select name="language_id" id="editLanguageId" class="form-select border-dark">
+                        <select name="language_id" class="form-select border-dark">
                             <?php foreach ($languages as $language) { ?>
                                 <option value="<?php echo (int) $language['id']; ?>" <?php echo (int) $paragraph['language_id'] === (int) $language['id'] ? 'selected' : ''; ?>>
                                     <?php echo htmlspecialchars($language['name']); ?>
@@ -155,9 +155,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label">Exam Type</label>
-                        <select name="exam_type_id" id="editExamTypeId" class="form-select border-dark">
-                            <option value="">Select exam type</option>
+                        <label class="form-label">Level</label>
+                        <select name="level" class="form-select border-dark">
+                            <?php foreach ($levelDefinitions as $slug => $definition) { ?>
+                                <option value="<?php echo htmlspecialchars($slug); ?>" <?php echo ($paragraph['level'] ?? '') === $slug ? 'selected' : ''; ?>>
+                                    <?php echo htmlspecialchars($definition['label']); ?>
+                                </option>
+                            <?php } ?>
                         </select>
                     </div>
                 </div>
@@ -177,7 +181,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="mt-3">
                 <label class="form-label">Paragraph Content</label>
                 <textarea name="content" rows="8" class="form-control border-dark" required><?php echo htmlspecialchars($paragraph['content']); ?></textarea>
-                <div class="form-text text-muted">Line breaks and paragraph spacing are shown in the student typing test exactly as entered here.</div>
+                <div class="form-text text-muted">Line breaks and paragraph spacing are shown in the typing test exactly as entered here.</div>
             </div>
 
             <div class="mt-4">
@@ -186,42 +190,3 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </form>
     </div>
 </div>
-
-<?php if ($schemaReady) { ?>
-<script>
-const editExamTypeMap = <?php echo json_encode($examTypeMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
-const editLanguageSelect = document.getElementById('editLanguageId');
-const editExamTypeSelect = document.getElementById('editExamTypeId');
-const currentExamTypeId = '<?php echo htmlspecialchars((string) ($paragraph['exam_type_id'] ?? '')); ?>';
-
-function renderEditExamTypes(languageId) {
-    editExamTypeSelect.innerHTML = '<option value="">Select exam type</option>';
-    const items = editExamTypeMap[languageId] || [];
-
-    items.forEach((item) => {
-        const option = document.createElement('option');
-        option.value = item.id;
-        option.textContent = `${item.name} (${item.wpm} WPM)`;
-        if (String(item.id) === currentExamTypeId) {
-            option.selected = true;
-        }
-        editExamTypeSelect.appendChild(option);
-    });
-}
-
-if (editLanguageSelect && editExamTypeSelect) {
-    renderEditExamTypes(editLanguageSelect.value);
-    editLanguageSelect.addEventListener('change', () => {
-        editExamTypeSelect.innerHTML = '<option value="">Select exam type</option>';
-        const items = editExamTypeMap[editLanguageSelect.value] || [];
-
-        items.forEach((item) => {
-            const option = document.createElement('option');
-            option.value = item.id;
-            option.textContent = `${item.name} (${item.wpm} WPM)`;
-            editExamTypeSelect.appendChild(option);
-        });
-    });
-}
-</script>
-<?php } ?>

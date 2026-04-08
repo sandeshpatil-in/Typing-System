@@ -198,7 +198,7 @@ function getPlanPaymentLabel($plan) {
     $paymentMethod = strtolower((string) ($plan['payment_method'] ?? ''));
 
     if (in_array($paymentMethod, ['hand_cash', 'cash', 'manual', 'manual_cash'], true)) {
-        return 'Hand Cash';
+        return 'Manual Pay';
     }
 
     if ($paymentMethod === 'razorpay') {
@@ -216,7 +216,7 @@ function getPlanPaymentLabel($plan) {
     $planName = strtolower((string) ($plan['plan_name'] ?? ''));
 
     if (str_contains($planName, 'cash') || str_contains($planName, 'manual')) {
-        return 'Hand Cash';
+        return 'Manual Pay';
     }
 
     return 'Manual Activation';
@@ -451,6 +451,139 @@ function guestHasTestsRemaining($conn = null) {
     return getGuestTestsRemaining($conn) > 0;
 }
 
+function getStudentFreeAttemptCount($conn, $studentId) {
+    $studentId = (int) $studentId;
+
+    if ($studentId <= 0) {
+        return 0;
+    }
+
+    if (dbTableExists($conn, 'test_attempts') && dbColumnExists($conn, 'test_attempts', 'student_id')) {
+        $hasAccessType = dbColumnExists($conn, 'test_attempts', 'access_type');
+        $sql = $hasAccessType
+            ? "SELECT COUNT(*) AS total
+               FROM test_attempts
+               WHERE student_id = ? AND access_type = 'guest'"
+            : "SELECT COUNT(*) AS total
+               FROM test_attempts
+               WHERE student_id = ?";
+
+        $stmt = $conn->prepare($sql);
+
+        if ($stmt) {
+            $stmt->bind_param('i', $studentId);
+            $stmt->execute();
+            $row = $stmt->get_result()->fetch_assoc() ?: ['total' => 0];
+            $stmt->close();
+
+            return (int) ($row['total'] ?? 0);
+        }
+    }
+
+    if (dbTableExists($conn, 'results') && dbColumnExists($conn, 'results', 'student_id')) {
+        $stmt = $conn->prepare(
+            "SELECT COUNT(*) AS total
+             FROM results
+             WHERE student_id = ?"
+        );
+
+        if ($stmt) {
+            $stmt->bind_param('i', $studentId);
+            $stmt->execute();
+            $row = $stmt->get_result()->fetch_assoc() ?: ['total' => 0];
+            $stmt->close();
+
+            return (int) ($row['total'] ?? 0);
+        }
+    }
+
+    return 0;
+}
+
+function getStudentFreeTestsRemaining($conn, $studentId) {
+    return max(0, GUEST_TEST_LIMIT - getStudentFreeAttemptCount($conn, $studentId));
+}
+
+function getTypingResultCleanupStateFile() {
+    $directory = ROOT_PATH . '/logs/maintenance';
+
+    if (!is_dir($directory)) {
+        @mkdir($directory, 0755, true);
+    }
+
+    return $directory . '/typing-result-retention.json';
+}
+
+function shouldRunTypingResultCleanup($force = false) {
+    if ($force || ATTEMPT_RETENTION_DAYS <= 0) {
+        return true;
+    }
+
+    $stateFile = getTypingResultCleanupStateFile();
+
+    if (!is_file($stateFile)) {
+        return true;
+    }
+
+    $state = json_decode((string) @file_get_contents($stateFile), true);
+    $lastRun = is_array($state) ? (int) ($state['last_run'] ?? 0) : 0;
+
+    return $lastRun <= 0 || (time() - $lastRun) >= ATTEMPT_RETENTION_CLEANUP_INTERVAL;
+}
+
+function markTypingResultCleanupRun($deletedCounts) {
+    $stateFile = getTypingResultCleanupStateFile();
+    @file_put_contents($stateFile, json_encode([
+        'last_run' => time(),
+        'deleted' => $deletedCounts
+    ], JSON_UNESCAPED_SLASHES), LOCK_EX);
+}
+
+function pruneExpiredTypingResults($conn, $force = false) {
+    if (!$conn || ATTEMPT_RETENTION_DAYS <= 0 || !shouldRunTypingResultCleanup($force)) {
+        return;
+    }
+
+    $cutoff = date('Y-m-d H:i:s', strtotime('-' . ATTEMPT_RETENTION_DAYS . ' days'));
+    $deletedCounts = [
+        'test_attempts' => 0,
+        'results' => 0
+    ];
+
+    if (dbTableExists($conn, 'test_attempts') && dbColumnExists($conn, 'test_attempts', 'created_at')) {
+        $stmt = $conn->prepare("DELETE FROM test_attempts WHERE created_at < ?");
+
+        if ($stmt) {
+            $stmt->bind_param('s', $cutoff);
+            $stmt->execute();
+            $deletedCounts['test_attempts'] = max(0, (int) $stmt->affected_rows);
+            $stmt->close();
+        }
+    }
+
+    if (dbTableExists($conn, 'results') && dbColumnExists($conn, 'results', 'created_at')) {
+        $stmt = $conn->prepare("DELETE FROM results WHERE created_at < ?");
+
+        if ($stmt) {
+            $stmt->bind_param('s', $cutoff);
+            $stmt->execute();
+            $deletedCounts['results'] = max(0, (int) $stmt->affected_rows);
+            $stmt->close();
+        }
+    }
+
+    markTypingResultCleanupRun($deletedCounts);
+
+    if (($deletedCounts['test_attempts'] + $deletedCounts['results']) > 0) {
+        logError(
+            'Deleted expired typing records older than ' . ATTEMPT_RETENTION_DAYS . ' days. '
+            . 'test_attempts=' . $deletedCounts['test_attempts']
+            . ', results=' . $deletedCounts['results'],
+            'MAINTENANCE'
+        );
+    }
+}
+
 function linkGuestAttemptsToStudent($conn, $studentId) {
     if (
         !$conn
@@ -491,17 +624,28 @@ function getAccessContext($conn) {
     $student = null;
     $isLoggedIn = isStudentLoggedIn();
     $guestAttemptsUsed = getGuestAttemptsUsed($conn);
+    $freeAttemptsUsed = $guestAttemptsUsed;
+    $freeTestsRemaining = max(0, GUEST_TEST_LIMIT - $guestAttemptsUsed);
+    $hasActivePlan = false;
 
     if ($isLoggedIn) {
         $student = syncStudentPlanStatus($conn, getStudentId());
+
+        if ($student) {
+            $hasActivePlan = hasActivePlan($student);
+            $freeAttemptsUsed = getStudentFreeAttemptCount($conn, (int) $student['id']);
+            $freeTestsRemaining = getStudentFreeTestsRemaining($conn, (int) $student['id']);
+        }
     }
 
     return [
         'is_logged_in' => $isLoggedIn,
         'student' => $student,
-        'has_active_plan' => $isLoggedIn && hasActivePlan($student),
+        'has_active_plan' => $hasActivePlan,
+        'free_attempts_used' => $freeAttemptsUsed,
+        'free_tests_remaining' => $freeTestsRemaining,
         'guest_attempts_used' => $guestAttemptsUsed,
-        'guest_tests_remaining' => max(0, GUEST_TEST_LIMIT - $guestAttemptsUsed),
+        'guest_tests_remaining' => $freeTestsRemaining,
         'guest_session_id' => getGuestSessionId()
     ];
 }
@@ -509,13 +653,13 @@ function getAccessContext($conn) {
 function requireTypingAccess($conn) {
     $context = getAccessContext($conn);
 
-    if ($context['is_logged_in'] && !$context['has_active_plan']) {
-        setFlash('auth_message', 'Your plan is inactive or expired. Please renew to continue.');
+    if ($context['is_logged_in'] && !$context['has_active_plan'] && $context['free_tests_remaining'] <= 0) {
+        setFlash('auth_message', 'Your 5 free tests are finished. Activate your plan to continue.');
         redirect('payment.php');
     }
 
     if (!$context['is_logged_in'] && !$context['guest_tests_remaining']) {
-        setFlash('auth_message', 'Your 5 free guest tests are finished. Create an account to continue.');
+        setFlash('auth_message', 'Your 5 free tests are finished. Create an account and activate your plan to continue.');
         redirect('account/register.php');
     }
 
@@ -663,6 +807,14 @@ function recordTestAttempt($conn, $data) {
 }
 
 function createRazorpayOrder($receipt, $amountPaise) {
+    if (!function_exists('curl_init')) {
+        logError('cURL extension is not available for Razorpay order creation.', 'PAYMENT');
+
+        return [
+            'error_message' => 'Payment gateway is not available on this server.'
+        ];
+    }
+
     $payload = json_encode([
         'amount' => $amountPaise,
         'currency' => PAYMENT_CURRENCY,
@@ -675,9 +827,14 @@ function createRazorpayOrder($receipt, $amountPaise) {
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST => true,
         CURLOPT_POSTFIELDS => $payload,
+        CURLOPT_CONNECTTIMEOUT => 10,
         CURLOPT_HTTPHEADER => [
             'Content-Type: application/json'
         ],
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYHOST => 2,
+        CURLOPT_TIMEOUT => 30,
+        CURLOPT_USERAGENT => APP_NAME . '/' . APP_VERSION,
         CURLOPT_USERPWD => RAZORPAY_KEY_ID . ':' . RAZORPAY_KEY_SECRET
     ]);
 
@@ -711,12 +868,22 @@ function getStudentAttemptsResult($conn, $studentId, $limit = 20) {
     if (dbTableExists($conn, 'test_attempts')) {
         $hasExamType = dbColumnExists($conn, 'test_attempts', 'exam_type');
         $hasTypedWords = dbColumnExists($conn, 'test_attempts', 'typed_words');
+        $hasTimeLimitSeconds = dbColumnExists($conn, 'test_attempts', 'time_limit_seconds');
         $hasAccessType = dbColumnExists($conn, 'test_attempts', 'access_type');
+        $typedWordsSelect = "0 AS typed_words";
+
+        if ($hasTypedWords && $hasTimeLimitSeconds) {
+            $typedWordsSelect = "COALESCE(NULLIF(typed_words, 0), CASE WHEN time_limit_seconds > 0 THEN ROUND((wpm * time_limit_seconds) / 60) ELSE 0 END) AS typed_words";
+        } elseif ($hasTypedWords) {
+            $typedWordsSelect = "typed_words";
+        } elseif ($hasTimeLimitSeconds) {
+            $typedWordsSelect = "CASE WHEN time_limit_seconds > 0 THEN ROUND((wpm * time_limit_seconds) / 60) ELSE 0 END AS typed_words";
+        }
 
         $sql = "SELECT language, "
             . ($hasExamType ? "exam_type" : "'typing' AS exam_type")
             . ", wpm, accuracy, "
-            . ($hasTypedWords ? "typed_words" : "0 AS typed_words")
+            . $typedWordsSelect
             . ", " . ($hasAccessType ? "access_type" : "'paid' AS access_type")
             . ", created_at
                FROM test_attempts
@@ -736,7 +903,19 @@ function getStudentAttemptsResult($conn, $studentId, $limit = 20) {
     }
 
     if (dbTableExists($conn, 'results')) {
-        $sql = "SELECT language, 'typing' AS exam_type, wpm, accuracy, 0 AS typed_words, 'paid' AS access_type, created_at
+        $hasTypedWords = dbColumnExists($conn, 'results', 'typed_words');
+        $hasTimeLimitSeconds = dbColumnExists($conn, 'results', 'time_limit_seconds');
+        $typedWordsSelect = "0 AS typed_words";
+
+        if ($hasTypedWords && $hasTimeLimitSeconds) {
+            $typedWordsSelect = "COALESCE(NULLIF(typed_words, 0), CASE WHEN time_limit_seconds > 0 THEN ROUND((wpm * time_limit_seconds) / 60) ELSE 0 END) AS typed_words";
+        } elseif ($hasTypedWords) {
+            $typedWordsSelect = "typed_words";
+        } elseif ($hasTimeLimitSeconds) {
+            $typedWordsSelect = "CASE WHEN time_limit_seconds > 0 THEN ROUND((wpm * time_limit_seconds) / 60) ELSE 0 END AS typed_words";
+        }
+
+        $sql = "SELECT language, 'typing' AS exam_type, wpm, accuracy, {$typedWordsSelect}, 'paid' AS access_type, created_at
                 FROM results
                 WHERE student_id = ?
                 ORDER BY id DESC

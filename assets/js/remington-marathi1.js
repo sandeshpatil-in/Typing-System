@@ -7,6 +7,16 @@ function initRemingtonTyping(language) {
   if (!typingArea) return;
 
   const resolvedLanguage = String(language || "").toLowerCase();
+  const isSupported = resolvedLanguage === "marathi" || resolvedLanguage === "hindi";
+  const allowBackspace = !!(window.typingOptions ? window.typingOptions.allowBackspace : true);
+
+  // Force a Devanagari-friendly font stack and enable ligatures so conjuncts like "द्य" render joined
+  // even on systems that default to Latin-first stacks.
+  if (isSupported) {
+    typingArea.style.fontFamily = "'Mangal', 'Nirmala UI', 'Noto Sans Devanagari', sans-serif";
+    typingArea.style.fontVariantLigatures = "normal";
+    typingArea.style.fontFeatureSettings = '"liga" 1, "clig" 1, "locl" 1';
+  }
 
   // CDAC/GIST Remington Marathi keyboard layout.
   // Blue characters in the keyboard chart = normalMap.
@@ -23,7 +33,7 @@ function initRemingtonTyping(language) {
     "8": "८",
     "9": "९",
     "0": "०",
-    "-": "-",
+    "-": "ञ",
     "=": "ृ",
 
     q: "ु",
@@ -38,7 +48,7 @@ function initRemingtonTyping(language) {
     p: "च",
     "[": "ख्",
     "]": ",",
-    "\\": "ृ",
+    "\\": ".",
 
     a: "ं",
     s: "े",
@@ -120,10 +130,12 @@ function initRemingtonTyping(language) {
   const altMap = {};
 
   typingArea.addEventListener("keydown", function (e) {
-    if (resolvedLanguage !== "marathi") return;
+    if (!isSupported) return;
     if (e.ctrlKey) return;
 
     if (e.key === "Backspace") {
+      if (allowBackspace) return;
+
       e.preventDefault();
 
       const start = this.selectionStart;
@@ -167,24 +179,48 @@ function insertText(field, char) {
   const end = field.selectionEnd;
   const text = field.value;
   const prev = text[start - 1] || "";
+  const prev2 = text.slice(Math.max(0, start - 2), start); // last two chars
 
-  if (char === "्") {
-    field.value = text.slice(0, start) + "्" + text.slice(end);
-    field.selectionStart = field.selectionEnd = start + 1;
+  // If the previous key produced a standalone "ि" and the user now types a base letter,
+  // move the matra after the base so the stored text stays in canonical order (consonant + ि).
+  if (prev === "ि" && char && char !== "्") {
+    const newText = text.slice(0, start - 1) + char + "ि" + text.slice(end);
+    field.value = newText;
+    field.selectionStart = field.selectionEnd = (start - 1) + char.length + 1;
     return;
   }
 
-  if (char === "ि" && start > 0) {
-    field.value = text.slice(0, start - 1) + "ि" + prev + text.slice(end);
-    field.selectionStart = field.selectionEnd = start + 1;
+  // Normalize अ + ा to the single vowel आ so passages that use the atomic character match.
+  if (prev === "अ" && char === "ा") {
+    field.value = text.slice(0, start - 1) + "आ" + text.slice(end);
+    field.selectionStart = field.selectionEnd = start;
     return;
   }
 
   const combo = prev + char;
 
-  if (combo === "ज्ञ" || combo === "त्र" || combo === "श्र" || combo === "क्ष") {
-    removePrev(field);
-    char = combo;
+  if (start > 0 && (combo === "ज्ञ" || combo === "त्र" || combo === "श्र" || combo === "क्ष" || combo === "द्य")) {
+    const newText = text.slice(0, start - 1) + combo + text.slice(end);
+    field.value = newText;
+    field.selectionStart = field.selectionEnd = (start - 1) + combo.length;
+    return;
+  }
+
+  // ट/ठ/ड/ढ + र => conjunct (e.g., Shift+V then Z => "ट्र")
+  if (start > 0 && (prev === "ट" || prev === "ठ" || prev === "ड" || prev === "ढ") && char === "र") {
+    const conj = prev + "्र";
+    const newText = text.slice(0, start - 1) + conj + text.slice(end);
+    field.value = newText;
+    field.selectionStart = field.selectionEnd = (start - 1) + conj.length;
+    return;
+  }
+
+  // त्र + य => त्र्य (used in त्र्यंबक etc.)
+  if (prev2 === "त्र" && char === "य") {
+    const newText = text.slice(0, start - 2) + "त्र्य" + text.slice(end);
+    field.value = newText;
+    field.selectionStart = field.selectionEnd = (start - 2) + "त्र्य".length;
+    return;
   }
 
   field.value = text.slice(0, start) + char + text.slice(end);

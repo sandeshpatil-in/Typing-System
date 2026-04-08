@@ -1,23 +1,29 @@
 <?php
+if (!defined('APP_INITIALIZED')) {
+    require_once __DIR__ . '/../includes/init.php';
+}
+
 if (!isAdminLoggedIn()) {
     redirect('admin/login.php');
 }
 
-$id = 0;
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
-        setFlash('admin_student_message', 'Activation failed because the session expired. Please try again.');
-        redirect('admin/dashboard.php?page=students');
-    }
-
-    $id = (int) getSafePost('id', 0);
-} else {
-    $id = (int) getSafeGet('id', 0);
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    setFlash('admin_student_message', 'Activation must be submitted from the students page.');
+    setFlash('admin_student_message_type', 'warning');
+    redirect('admin/dashboard.php?page=students');
 }
+
+if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
+    setFlash('admin_student_message', 'Activation failed because the session expired. Please try again.');
+    setFlash('admin_student_message_type', 'error');
+    redirect('admin/dashboard.php?page=students');
+}
+
+$id = (int) getSafePost('id', 0);
 
 if ($id <= 0) {
     setFlash('admin_student_message', 'Invalid student selected.');
+    setFlash('admin_student_message_type', 'error');
     redirect('admin/dashboard.php?page=students');
 }
 
@@ -25,6 +31,7 @@ $student = getStudentById($conn, $id);
 
 if (!$student) {
     setFlash('admin_student_message', 'Student not found.');
+    setFlash('admin_student_message_type', 'error');
     redirect('admin/dashboard.php?page=students');
 }
 
@@ -46,7 +53,7 @@ if (function_exists('dbTableExists') && dbTableExists($conn, 'plans')) {
         $columns = ['student_id', 'plan_name', 'amount', 'start_date', 'expiry_date'];
         $placeholders = ['?', '?', '?', '?', '?'];
         $types = 'isdss';
-        $values = [$id, 'Hand Cash Activation', 0.00, $startDate, $expiryDate];
+        $values = [$id, 'Manual Pay Activation', 0.00, $startDate, $expiryDate];
 
         if ($hasCurrency) {
             $columns[] = 'currency';
@@ -89,7 +96,7 @@ if (function_exists('dbTableExists') && dbTableExists($conn, 'plans')) {
         $columns = ['student_id', 'plan_name', 'amount', 'start_date', 'expiry_date'];
         $placeholders = ['?', '?', '?', '?', '?'];
         $types = 'isdss';
-        $values = [$id, 'Hand Cash Activation', 0.00, $startDate, $expiryDate];
+        $values = [$id, 'Manual Pay Activation', 0.00, $startDate, $expiryDate];
 
         if ($hasCurrency) {
             $columns[] = 'currency';
@@ -192,9 +199,11 @@ if (function_exists('dbTableExists') && dbTableExists($conn, 'plans')) {
 }
 
 if (updateStudentPlanAccess($conn, $id, true, $startDate, $expiryDate)) {
-    setFlash('admin_student_message', 'Hand cash activation saved. Student access is active for the next 30 days.');
+    setFlash('admin_student_message', 'Manual Pay activation saved. Student access is active for the next 30 days.');
+    setFlash('admin_student_message_type', 'success');
 } else {
     setFlash('admin_student_message', 'Unable to activate the student.');
+    setFlash('admin_student_message_type', 'error');
 }
 
 redirect('admin/dashboard.php?page=students');

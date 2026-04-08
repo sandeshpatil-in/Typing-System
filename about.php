@@ -1,12 +1,23 @@
-<?php include 'includes/header.php'; ?>
-<link rel="stylesheet" href="assets/css/style.css">
+<?php
+require_once __DIR__ . '/includes/init.php';
+$pageTitle = 'About | ' . APP_NAME;
+$metaDescription = 'Learn about Ahilya Typing and how we help students practice typing for exams with a clean dashboard and reports.';
+include 'includes/header.php';
+?>
 
   <section class="about my-5 min-vh-100">
     <div class="container">
       <h2 class="text-center pb-3">About Us</h2>
-      <p>Ahilya Student Desk is a simple and effective typing system designed to help individuals prepare for government exams in both English and Marathi languages. Our platform offers a user-friendly interface that allows users to practice their typing skills in a structured manner, focusing on speed, accuracy, and overall performance.</p>
-      <p>With a variety of customizable options, users can select their preferred language, set time limits for practice sessions, choose from different fonts, and select paragraphs to type. The system provides real-time feedback on typing speed (WPM), accuracy, total words typed, and offers the option to retry for improvement.</p>
-      <p>Our goal is to provide an accessible and efficient tool for exam preparation, helping users enhance their typing skills and boost their confidence for government exams. Whether you're a beginner or looking to improve your existing skills, Ahilya Student Desk is here to support your journey towards success.</p>
+      <p>Ahilya Typing is a dedicated typing practice platform built to support learners and aspirants preparing for competitive and government typing exams. We provide a simple and focused environment for improving speed, accuracy, and confidence in English and Marathi typing.</p>
+      <p>Our platform is designed to make practice easy, with structured typing tests, performance tracking, and an interface that helps users stay consistent in their preparation. Whether you are just getting started or working to improve your test performance, Ahilya Typing aims to make your practice more effective.</p>
+      <p>We are committed to offering a reliable online practice experience through <a href="https://ahilyatyping.com/" target="_blank" rel="noopener noreferrer">ahilyatyping.com</a>, along with responsive support for students and users who need assistance.</p>
+      <div class="mt-4">
+        <h5>Business Information</h5>
+        <p class="mb-1"><strong>Website:</strong> <a href="https://ahilyatyping.com/" target="_blank" rel="noopener noreferrer">ahilyatyping.com</a></p>
+        <p class="mb-1"><strong>Email:</strong> <a href="mailto:ahilyatyping@gmail.com">ahilyatyping@gmail.com</a></p>
+        <p class="mb-1"><strong>Mobile:</strong> <a href="tel:7559171959">7559171959</a></p>
+        <p class="mb-0"><strong>Address:</strong> Police Line, Near Nirmala sanskrutik hall, Bhind, Mahadevnager, Urun-Ishwarpur, Maharashtra 415409</p>
+      </div>
     </div>
   </section>    
 

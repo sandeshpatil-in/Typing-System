@@ -85,7 +85,8 @@ function getSafePost($key, $default = null) {
  * @return void
  */
 function logError($message, $type = 'ERROR') {
-    $timestamp = date('Y-m-d H:i:s');
+    // Use IST for consistent logging across the app
+    $timestamp = date('d-m-Y H:i:s');
     $logEntry = "[{$timestamp}] [{$type}] {$message}" . PHP_EOL;
     
     if (DEBUG_MODE || APP_ENV === 'production') {
@@ -124,6 +125,9 @@ function handleError($message, $code = 500) {
  */
 function initSession() {
     if (session_status() === PHP_SESSION_NONE) {
+        ini_set('session.use_strict_mode', '1');
+        ini_set('session.use_only_cookies', '1');
+
         if (!headers_sent()) {
             session_set_cookie_params([
                 'httponly' => true,
@@ -131,12 +135,165 @@ function initSession() {
                 'secure' => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
             ]);
         }
+
         session_start();
-        
-        // Set secure session configuration
-        ini_set('session.use_strict_mode', '1');
-        ini_set('session.use_only_cookies', '1');
     }
+}
+
+/**
+ * Get the current client IP address for lightweight rate limiting.
+ *
+ * @return string
+ */
+function getClientIp() {
+    $remoteAddr = trim((string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+    return $remoteAddr !== '' ? $remoteAddr : 'unknown';
+}
+
+/**
+ * Build a private file path for login-attempt tracking.
+ *
+ * @param string $scope
+ * @return string
+ */
+function getLoginAttemptFile($scope) {
+    $directory = ROOT_PATH . '/logs/login-attempts';
+
+    if (!is_dir($directory)) {
+        mkdir($directory, 0755, true);
+    }
+
+    $key = hash('sha256', $scope . '|' . getClientIp());
+    return $directory . '/' . $key . '.json';
+}
+
+/**
+ * Read current login-attempt state for the visitor.
+ *
+ * @param string $scope
+ * @return array{count:int,window_started_at:int,locked_until:int}
+ */
+function readLoginAttemptState($scope) {
+    $file = getLoginAttemptFile($scope);
+
+    if (!is_file($file)) {
+        return [
+            'count' => 0,
+            'window_started_at' => 0,
+            'locked_until' => 0
+        ];
+    }
+
+    $decoded = json_decode((string) file_get_contents($file), true);
+
+    if (!is_array($decoded)) {
+        return [
+            'count' => 0,
+            'window_started_at' => 0,
+            'locked_until' => 0
+        ];
+    }
+
+    return [
+        'count' => max(0, (int) ($decoded['count'] ?? 0)),
+        'window_started_at' => max(0, (int) ($decoded['window_started_at'] ?? 0)),
+        'locked_until' => max(0, (int) ($decoded['locked_until'] ?? 0))
+    ];
+}
+
+/**
+ * Persist login-attempt state.
+ *
+ * @param string $scope
+ * @param array $state
+ * @return void
+ */
+function writeLoginAttemptState($scope, $state) {
+    $file = getLoginAttemptFile($scope);
+    file_put_contents($file, json_encode($state, JSON_UNESCAPED_SLASHES), LOCK_EX);
+}
+
+/**
+ * Check whether the visitor is currently rate limited for a login form.
+ *
+ * @param string $scope
+ * @param int|null $secondsRemaining
+ * @return bool
+ */
+function isLoginRateLimited($scope, &$secondsRemaining = null) {
+    $state = readLoginAttemptState($scope);
+    $now = time();
+
+    if ($state['locked_until'] > $now) {
+        $secondsRemaining = $state['locked_until'] - $now;
+        return true;
+    }
+
+    if ($state['window_started_at'] > 0 && ($now - $state['window_started_at']) > LOGIN_ATTEMPT_TIMEOUT) {
+        clearLoginRateLimit($scope);
+    }
+
+    $secondsRemaining = 0;
+    return false;
+}
+
+/**
+ * Record a failed login attempt for the current visitor.
+ *
+ * @param string $scope
+ * @return void
+ */
+function recordLoginFailure($scope) {
+    $state = readLoginAttemptState($scope);
+    $now = time();
+
+    if ($state['window_started_at'] <= 0 || ($now - $state['window_started_at']) > LOGIN_ATTEMPT_TIMEOUT) {
+        $state = [
+            'count' => 0,
+            'window_started_at' => $now,
+            'locked_until' => 0
+        ];
+    }
+
+    $state['count']++;
+
+    if ($state['count'] >= MAX_LOGIN_ATTEMPTS) {
+        $state['locked_until'] = $now + LOGIN_ATTEMPT_TIMEOUT;
+    }
+
+    writeLoginAttemptState($scope, $state);
+}
+
+/**
+ * Clear stored login-attempt state after a successful login.
+ *
+ * @param string $scope
+ * @return void
+ */
+function clearLoginRateLimit($scope) {
+    $file = getLoginAttemptFile($scope);
+
+    if (is_file($file)) {
+        @unlink($file);
+    }
+}
+
+/**
+ * Human-readable login lockout message.
+ *
+ * @param int $secondsRemaining
+ * @return string
+ */
+function getLoginRateLimitMessage($secondsRemaining) {
+    $secondsRemaining = max(1, (int) $secondsRemaining);
+    $minutes = (int) floor($secondsRemaining / 60);
+    $seconds = $secondsRemaining % 60;
+
+    if ($minutes > 0) {
+        return "Too many login attempts. Please wait {$minutes} minute(s) and {$seconds} second(s) before trying again.";
+    }
+
+    return "Too many login attempts. Please wait {$seconds} second(s) before trying again.";
 }
 
 /**
@@ -265,8 +422,18 @@ function isCurrentPage($page) {
  * @param string $format Date format
  * @return string Formatted date
  */
-function formatDate($date, $format = 'Y-m-d H:i:s') {
-    return date($format, strtotime($date));
+function formatDate($date, $format = 'd-m-Y h:i A') {
+    if (empty($date)) {
+        return 'Not available';
+    }
+
+    $timestamp = strtotime((string) $date);
+
+    if ($timestamp === false) {
+        return $date;
+    }
+
+    return date($format, $timestamp);
 }
 
 /**
@@ -384,7 +551,8 @@ function getFlash($key, $default = null) {
  */
 function jsonResponse($data, $statusCode = 200) {
     http_response_code($statusCode);
-    header('Content-Type: application/json');
+    header('Content-Type: application/json; charset=UTF-8');
+    header('X-Content-Type-Options: nosniff');
     echo json_encode($data);
     exit();
 }

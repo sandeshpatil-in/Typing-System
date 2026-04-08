@@ -4,16 +4,39 @@
 
     <?php require_once __DIR__ . '/init.php'; ?>
 
+    <?php
+        $appName = defined('APP_NAME') ? APP_NAME : 'Ahilya Typing';
+        $metaDescriptionContent = trim((string) ($metaDescription ?? 'Practice typing with guided levels, reports, and a clean dashboard for students and admins.'));
+        $metaRobots = trim((string) ($metaRobots ?? 'index,follow'));
+        $requestPath = (string) parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
+        $canonicalUrl = trim((string) ($canonicalUrl ?? (BASE_URL . ltrim($requestPath, '/'))));
+        $pageTitle = trim((string) ($pageTitle ?? $appName));
+        $structuredData = $structuredData ?? null;
+    ?>
+
     <!-- Meta -->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo defined('APP_NAME') ? APP_NAME : 'Ahilya Student Desk'; ?></title>
+    <title><?php echo htmlspecialchars($pageTitle); ?></title>
+    <meta name="description" content="<?php echo htmlspecialchars($metaDescriptionContent); ?>">
+    <meta name="robots" content="<?php echo htmlspecialchars($metaRobots); ?>">
+    <link rel="canonical" href="<?php echo htmlspecialchars($canonicalUrl); ?>">
+    <meta name="theme-color" content="#0d6efd">
 
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="<?php echo BASE_URL; ?>assets/images/favicon.png">
+
+    <?php if (!empty($structuredData)) { ?>
+        <script type="application/ld+json">
+            <?php echo json_encode($structuredData, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT); ?>
+        </script>
+    <?php } ?>
 </head>
 
 <body>
@@ -24,7 +47,7 @@
 
         <!-- Logo -->
         <a class="navbar-brand fw-bold" href="<?php echo defined('BASE_URL') ? BASE_URL : 'index.php'; ?>">
-            <?php echo defined('APP_NAME') ? APP_NAME : 'Student Desk'; ?>
+            <?php echo defined('APP_NAME') ? APP_NAME : 'Ahilya Typing'; ?>
         </a>
 
         <!-- Mobile Toggle -->
@@ -94,4 +117,10 @@
 </nav>
 
 <!-- Main Content -->
-<main class="container">
+<?php
+$currentScript = str_replace('\\', '/', (string) ($_SERVER['PHP_SELF'] ?? ''));
+$isAdminArea = str_contains($currentScript, '/admin/');
+$isStudentDashboard = str_contains($currentScript, '/account/dashboard.php');
+$mainClass = ($isAdminArea || $isStudentDashboard) ? 'container-fluid px-0' : 'container';
+?>
+<main class="<?php echo $mainClass; ?>">

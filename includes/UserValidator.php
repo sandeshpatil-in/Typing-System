@@ -103,9 +103,13 @@ class UserValidator {
      */
     public function validateRegistration($data) {
         $this->errors = [];
+        $hasContactNumber = function_exists('dbColumnExists') && dbColumnExists($this->conn, 'students', 'contact_number');
 
         // Validate required fields
         $required = ['name', 'email', 'password'];
+        if ($hasContactNumber) {
+            $required[] = 'contact_number';
+        }
         if (!validateRequired($required, $data)) {
             $this->errors[] = "All fields are required";
             return false;
@@ -126,6 +130,15 @@ class UserValidator {
         if (!isValidEmail($data['email'])) {
             $this->errors[] = "Invalid email format";
             return false;
+        }
+
+        if ($hasContactNumber) {
+            $contactNumber = self::normalizeContactNumber($data['contact_number'] ?? '');
+
+            if (!self::isValidContactNumber($contactNumber)) {
+                $this->errors[] = "Contact number must be 10 to 15 digits";
+                return false;
+            }
         }
 
         // Check if email already exists
@@ -224,22 +237,35 @@ class UserValidator {
         $name = sanitizeInput($data['name']);
         $email = sanitizeInput($data['email']);
         $passwordHash = password_hash($data['password'], PASSWORD_DEFAULT);
+        $hasContactNumber = function_exists('dbColumnExists') && dbColumnExists($this->conn, 'students', 'contact_number');
+        $contactNumber = $hasContactNumber ? self::normalizeContactNumber($data['contact_number'] ?? '') : '';
         $studentStatus = function_exists('getStudentStatusValue')
             ? getStudentStatusValue($this->conn, false)
             : 0;
         $statusPlaceholder = is_int($studentStatus) ? (string) $studentStatus : "'" . $this->conn->real_escape_string($studentStatus) . "'";
 
-        $stmt = $this->conn->prepare(
-            "INSERT INTO students (name, email, password, status, created_at) 
-             VALUES (?, ?, ?, {$statusPlaceholder}, NOW())"
-        );
+        if ($hasContactNumber) {
+            $stmt = $this->conn->prepare(
+                "INSERT INTO students (name, email, contact_number, password, status, created_at) 
+                 VALUES (?, ?, ?, ?, {$statusPlaceholder}, NOW())"
+            );
+        } else {
+            $stmt = $this->conn->prepare(
+                "INSERT INTO students (name, email, password, status, created_at) 
+                 VALUES (?, ?, ?, {$statusPlaceholder}, NOW())"
+            );
+        }
 
         if (!$stmt) {
             $this->errors[] = "Database error";
             return false;
         }
 
-        $stmt->bind_param("sss", $name, $email, $passwordHash);
+        if ($hasContactNumber) {
+            $stmt->bind_param("ssss", $name, $email, $contactNumber, $passwordHash);
+        } else {
+            $stmt->bind_param("sss", $name, $email, $passwordHash);
+        }
         
         if (!$stmt->execute()) {
             $this->errors[] = "Registration failed";
@@ -264,6 +290,29 @@ class UserValidator {
         $hasNumber = preg_match('/[0-9]/', $password);
         
         return $hasUpper && $hasLower && $hasNumber;
+    }
+
+    /**
+     * Normalize contact number to digits only.
+     *
+     * @param string $contactNumber
+     * @return string
+     */
+    public static function normalizeContactNumber($contactNumber) {
+        return preg_replace('/\D+/', '', (string) $contactNumber);
+    }
+
+    /**
+     * Validate student contact number length.
+     *
+     * @param string $contactNumber
+     * @return bool
+     */
+    public static function isValidContactNumber($contactNumber) {
+        $digits = self::normalizeContactNumber($contactNumber);
+        $length = strlen($digits);
+
+        return $length >= 10 && $length <= 15;
     }
 
     /**

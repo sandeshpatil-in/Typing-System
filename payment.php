@@ -40,7 +40,7 @@ $isRazorpayLiveMode = $paymentConfigured && str_starts_with(RAZORPAY_KEY_ID, 'rz
                                 <li class="list-group-item px-0">Unlimited typing tests during your active plan</li>
                                 <li class="list-group-item px-0">Secure checkout with Razorpay</li>
                                 <li class="list-group-item px-0">Automatic Razorpay activation for <?php echo PLAN_DURATION_DAYS; ?> days</li>
-                                <li class="list-group-item px-0">Admin can manually activate hand cash payments for the same <?php echo PLAN_DURATION_DAYS; ?>-day access</li>
+                                <li class="list-group-item px-0">Admin can manually activate Manual Pay payments for the same <?php echo PLAN_DURATION_DAYS; ?>-day access</li>
                             </ul>
                         </div>
 
@@ -67,7 +67,7 @@ $isRazorpayLiveMode = $paymentConfigured && str_starts_with(RAZORPAY_KEY_ID, 'rz
 
                                 <?php if (!$hasActivePlan) { ?>
                                     <div class="alert alert-light border mt-3 mb-0 small">
-                                        <strong>Paid by hand cash?</strong> Ask admin to activate your account from the student table.
+                                        <strong>Paid by Manual Pay?</strong> Ask admin to activate your account from the student table.
                                         <?php if ($latestPlan) { ?>
                                             <div class="mt-1 text-muted">Last payment record: <?php echo htmlspecialchars($paymentLabel); ?></div>
                                         <?php } ?>

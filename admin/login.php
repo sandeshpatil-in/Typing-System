@@ -6,10 +6,14 @@ if (isAdminLoggedIn()) {
 }
 
 $error = '';
+$loginScope = 'admin_login';
+$captchaScope = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
         $error = 'Your session expired. Please try again.';
+    } elseif (isLoginRateLimited($loginScope, $secondsRemaining)) {
+        $error = getLoginRateLimitMessage($secondsRemaining);
     } else {
         $username = getSafePost('username', '');
         $password = $_POST['password'] ?? '';
@@ -23,15 +27,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->close();
 
             if ($admin && password_verify($password, $admin['password'])) {
+                clearLoginRateLimit($loginScope);
                 session_regenerate_id(true);
                 $_SESSION[ADMIN_SESSION_KEY] = (int) $admin['id'];
                 redirect('admin/dashboard.php');
             }
         }
 
-        $error = 'Invalid admin credentials.';
+        recordLoginFailure($loginScope);
+        if (isLoginRateLimited($loginScope, $secondsRemaining)) {
+            $error = getLoginRateLimitMessage($secondsRemaining);
+        } else {
+            $error = 'Invalid admin credentials.';
+        }
     }
 }
+
 ?>
 
 <?php include("../includes/header.php"); ?>
@@ -44,6 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <h3 class="text-center mb-4">Admin Login</h3>
 
                     <?php if (!empty($error)) echo errorAlert(htmlspecialchars($error)); ?>
+                    <?php if ($flash = getFlash('admin_auth_message')) echo successAlert(htmlspecialchars($flash)); ?>
 
                     <form method="POST" novalidate>
                         <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrfToken()); ?>">
@@ -60,10 +72,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                         <button type="submit" class="btn btn-dark w-100">Login</button>
                     </form>
+
+                    <div class="text-center mt-3">
+                        <a href="forgot-password.php">Forgot password?</a>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+<?php if (isRecaptchaEnabled()) { ?>
+<script src="https://www.google.com/recaptcha/api.js" async defer></script>
+<?php } ?>
 
 <?php include("../includes/footer.php"); ?>

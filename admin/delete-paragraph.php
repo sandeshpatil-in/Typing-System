@@ -1,4 +1,9 @@
 <?php
+require_once __DIR__ . '/../includes/init.php';
+
+// Always send admins back to the Paragraphs tab after this action.
+$paragraphsPage = 'admin/dashboard.php?page=paragraphs';
+
 if (!isAdminLoggedIn()) {
     redirect('admin/login.php');
 }
@@ -6,7 +11,7 @@ if (!isAdminLoggedIn()) {
 $id = (int) getSafeGet('id', 0);
 
 if ($id <= 0) {
-    redirect('admin/dashboard.php?page=paragraphs');
+    redirect($paragraphsPage);
 }
 
 if (function_exists('dbTableExists') && dbTableExists($conn, 'passages')) {
@@ -14,7 +19,7 @@ if (function_exists('dbTableExists') && dbTableExists($conn, 'passages')) {
 } elseif (function_exists('dbTableExists') && dbTableExists($conn, 'paragraphs')) {
     $stmt = $conn->prepare("DELETE FROM paragraphs WHERE id = ?");
 } else {
-    redirect('admin/dashboard.php?page=paragraphs');
+    redirect($paragraphsPage);
 }
 
 if ($stmt) {
@@ -23,4 +28,4 @@ if ($stmt) {
     $stmt->close();
 }
 
-redirect('admin/dashboard.php?page=paragraphs');
+redirect($paragraphsPage);
